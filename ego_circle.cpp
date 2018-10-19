@@ -5,17 +5,23 @@
 
 #include <geometry_msgs/TransformStamped.h>
 #include <tf/LinearMath/Matrix3x3.h>
+
 #include <ros/ros.h>
+#include <tf2_ros/transform_listener.h>
+#include <message_filters/subscriber.h>
+#include <tf2_ros/message_filter.h>
+#include <nav_msgs/Odometry.h>
+
 
 struct EgoCircularPoint
 {
-  float x,y,d;
+  float x,y; // May add 'depth', if needed
   
   EgoCircularPoint()
   {}
   
   EgoCircularPoint(float x, float y) :
-    x(x), y(y), d(x*x+y*y)
+    x(x), y(y) //, d(x*x+y*y)
     {}
   
   float getKey() const
@@ -75,19 +81,21 @@ void applyTransform(EgoCircularPoint& point, SE2Transform transform)
   point.y = transform.r3 * x + transform.r4 * y + transform.t1;
 }
 
-
-struct EgoCircularCell_
+struct EgoCircularCell
 {
   //std::vector<float> x,y;
+  std::map<EgoCircularPoint, EgoCircularPoint> points_;
   
-  virtual void removeCloserPoints(EgoCircularPoint point)=0;
-  virtual void insertPointImpl(EgoCircularPoint point)=0;
-  
+  void removeCloserPoints(EgoCircularPoint point)
+  {
+    auto upper = points_.upper_bound(point);
+    points_.erase(points_.begin(),upper);
+  }
   
   void insertPoint(EgoCircularPoint point)
   {
     removeCloserPoints(point);
-    insertPointImpl(point);
+    points_[point] = point;
   }
   
   void applyTransform(SE2Transform transform)
@@ -108,24 +116,7 @@ struct EgoCircularCell_
   }
 };
 
-struct EgoCircularCellMap : public EgoCircularCell_
-{
-  std::map<EgoCircularPoint, EgoCircularPoint> points_;
-  
-  void removeCloserPoints(EgoCircularPoint point)
-  {
-    auto upper = points_.upper_bound(point);
-    points_.erase(points_.begin(),upper);
-  }
-  
-  void insertPointImpl(EgoCircularPoint point)
-  {
-    points_[point] = point;
-  }
-}
 
-
-typedef EgoCircularCellMap EgoCircularCell;
 
 struct EgoCircle
 {
@@ -139,29 +130,62 @@ struct EgoCircle
   int getIndex(EgoCircularPoint point)
   {
     float angle = std::atan2(point.y,point.x);
-    float scale = cells_.size()/(2*std::acos(-1));
+    float scale = cells_.size()/(2*std::acos(-1));  //Should make this a member variable
     
     int ind = angle * scale + cells_.size() / 2;
     return ind;
   }
   
-  void insertPoints(std::vector<EgoCircularPoint> points)
+  void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point)
+  {
+    int ind = getIndex(point);
+    cells[ind].insertPoint(point);
+  }
+  
+  void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points)
   {
     for(auto point : points)
     {
-      int ind = getIndex(point);
-      cells_[ind].insertPoint(point);
+      insertPoint(cells, point);
     }
+  }
+  
+  void insertPoints(std::vector<EgoCircularPoint> points)
+  {
+    insertPoints(cells_, points);
+  }
+  
+  void updateCells()
+  {
+    std::vector<EgoCircularCell> cells(cells_.size());
+    
+    for(auto cell : cells_)
+    {
+      for(auto point : cell.points_)
+      {
+        insertPoint(cells, point.second);
+      }
+    }
+    
+    cells_ = cells; //TODO: hold onto current and previous cell vectors; clear each cell after copying points from it, and std::swap vectors here
+    
   }
 
   void applyTransform(geometry_msgs::TransformStamped transform)
   {
+    ros::WallTime start = ros::WallTime::now();
     SE2Transform trans(transform);
     
     for(EgoCircularCell& cell : cells_)
     {
       cell.applyTransform(trans);
     }
+    updateCells();
+    
+    ros::WallTime end = ros::WallTime::now();
+    
+    ROS_INFO_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
+    
   }
   
   void printPoints() const
@@ -173,6 +197,77 @@ struct EgoCircle
       cell.printPoints();
       id++;
     }
+  }
+  
+};
+
+class EgoCircleROS
+{
+  typedef tf2_ros::MessageFilter<nav_msgs::Odometry> TF_Filter;
+private:
+  ros::NodeHandle nh_, pnh_;
+  tf2_ros::Buffer tf_buffer_;
+  tf2_ros::TransformListener tf_listener_;
+  
+  message_filters::Subscriber<nav_msgs::Odometry> odom_subscriber_;
+  std::shared_ptr<TF_Filter> tf_filter_;
+  std_msgs::Header old_header_;
+  
+  std::string odom_frame_id_ = "odom";
+  
+  EgoCircle ego_circle_;
+  
+public:
+  
+  EgoCircleROS(ros::NodeHandle nh = ros::NodeHandle(), ros::NodeHandle pnh=ros::NodeHandle("~")):
+    nh_(nh),
+    pnh_(pnh),
+    tf_listener_(tf_buffer_),
+    ego_circle_(512)
+  {
+    
+  }
+  
+  bool init()
+  {
+    int odom_queue_size = 5;
+    std::string odom_topic = "odom";
+    
+    tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_);
+    tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
+    tf_filter_->setTolerance(ros::Duration(0.01));
+    
+    ego_circle_ = EgoCircle(512);
+    
+    odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
+    
+  }
+  
+private:
+  void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
+  {
+    if(old_header_.stamp > ros::Time(0))
+    {
+      update(old_header_, odom_msg->header);
+    }
+    
+    old_header_ = odom_msg->header;
+  }
+  
+  bool update(std_msgs::Header old_header, std_msgs::Header new_header)
+  {
+    try
+    {
+      ROS_DEBUG("Getting Transformation details");
+      geometry_msgs::TransformStamped trans = tf_buffer_.lookupTransform(new_header.frame_id, new_header.stamp,
+                                                                      old_header.frame_id, old_header.stamp,
+                                                                      odom_frame_id_); 
+    }
+    catch (tf2::TransformException &ex) 
+    {
+      ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
+    }
+
   }
   
 };
@@ -196,8 +291,8 @@ std::vector<EgoCircularPoint> makePoints(int num)
 
 int main()
 {
-  EgoCircle circle(32);
-  circle.insertPoints(makePoints(5));
+  EgoCircle circle(512);
+  circle.insertPoints(makePoints(500));
   circle.printPoints();
   
   geometry_msgs::TransformStamped trans;
