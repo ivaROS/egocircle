@@ -75,16 +75,19 @@ void applyTransform(EgoCircularPoint& point, SE2Transform transform)
   point.y = transform.r3 * x + transform.r4 * y + transform.t1;
 }
 
-struct EgoCircularCell
+
+struct EgoCircularCell_
 {
   //std::vector<float> x,y;
-  std::map<EgoCircularPoint, EgoCircularPoint> points_;
+  
+  virtual void removeCloserPoints(EgoCircularPoint point)=0;
+  virtual void insertPointImpl(EgoCircularPoint point)=0;
+  
   
   void insertPoint(EgoCircularPoint point)
   {
-    auto upper = points_.upper_bound(point);
-    points_.erase(points_.begin(),upper);
-    points_[point] = point;
+    removeCloserPoints(point);
+    insertPointImpl(point);
   }
   
   void applyTransform(SE2Transform transform)
@@ -105,7 +108,24 @@ struct EgoCircularCell
   }
 };
 
+struct EgoCircularCellMap : public EgoCircularCell_
+{
+  std::map<EgoCircularPoint, EgoCircularPoint> points_;
+  
+  void removeCloserPoints(EgoCircularPoint point)
+  {
+    auto upper = points_.upper_bound(point);
+    points_.erase(points_.begin(),upper);
+  }
+  
+  void insertPointImpl(EgoCircularPoint point)
+  {
+    points_[point] = point;
+  }
+}
 
+
+typedef EgoCircularCellMap EgoCircularCell;
 
 struct EgoCircle
 {
@@ -176,8 +196,8 @@ std::vector<EgoCircularPoint> makePoints(int num)
 
 int main()
 {
-  EgoCircle circle(512);
-  circle.insertPoints(makePoints(200));
+  EgoCircle circle(32);
+  circle.insertPoints(makePoints(5));
   circle.printPoints();
   
   geometry_msgs::TransformStamped trans;
