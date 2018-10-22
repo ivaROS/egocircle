@@ -11,6 +11,10 @@
 #include <message_filters/subscriber.h>
 #include <tf2_ros/message_filter.h>
 #include <nav_msgs/Odometry.h>
+#include <visualization_msgs/Marker.h>
+
+
+class EgoCircleIter;
 
 
 struct EgoCircularPoint
@@ -85,6 +89,7 @@ struct EgoCircularCell
 {
   //std::vector<float> x,y;
   std::map<EgoCircularPoint, EgoCircularPoint> points_;
+  typedef std::map<EgoCircularPoint, EgoCircularPoint>::iterator iterator;
   
   void removeCloserPoints(EgoCircularPoint point)
   {
@@ -106,6 +111,16 @@ struct EgoCircularCell
     }
   }
   
+  iterator begin()
+  {
+    return points_.begin();
+  }
+  
+  iterator end()
+  {
+    return points_.end();
+  }
+  
   void printPoints() const
   {
     for(const auto& point : points_)
@@ -122,10 +137,18 @@ struct EgoCircle
 {
   std::vector<EgoCircularCell> cells_;
   
+  friend class EgoCircleIter;
+  typedef EgoCircleIter iterator;
+  
+  
   EgoCircle(int size)
   {
     cells_.resize(size);
   }
+  
+  iterator begin();
+  iterator end();
+  
   
   int getIndex(EgoCircularPoint point)
   {
@@ -201,6 +224,105 @@ struct EgoCircle
   
 };
 
+
+class EgoCircleIter
+{
+private:
+  EgoCircle& circle_;
+  int cell_id_;
+  EgoCircularCell::iterator point_it_;
+  
+public:
+  
+  EgoCircleIter(EgoCircle& circle, int cell_id, EgoCircularCell::iterator point_it) :
+    circle_(circle),
+    cell_id_(cell_id),
+    point_it_(point_it)
+  {}
+  
+  EgoCircleIter & operator++() 
+  {
+    ++point_it_;
+    
+    bool keep_going = true;
+    while(keep_going)
+    {
+      if(point_it_ == circle_.cells_[cell_id_].points_.end())
+      {
+        if(cell_id_ < circle_.cells_.size() - 1)
+        {
+          cell_id_++;
+          point_it_ = circle_.cells_[cell_id_].points_.begin();
+        }
+        else
+        {
+          keep_going = false;
+        }
+      }
+      else
+      {
+        keep_going = false;
+      }
+    }
+    return *this; 
+  }
+  
+  EgoCircleIter operator++(int)
+  {
+    EgoCircleIter clone(*this);
+    
+    ++point_it_;
+    
+    bool keep_going = true;
+    while(keep_going)
+    {
+      if(point_it_ == circle_.cells_[cell_id_].points_.end())
+      {
+        if(cell_id_ < circle_.cells_.size() - 1)
+        {
+          cell_id_++;
+          point_it_ = circle_.cells_[cell_id_].points_.begin();
+        }
+        else
+        {
+          keep_going = false;
+        }
+      }
+      else
+      {
+        keep_going = false;
+      }
+    }
+    
+    return clone;
+  }
+  
+  EgoCircularPoint & operator*() { return (*point_it_).second; }
+  
+  bool operator!=(EgoCircleIter other)
+  {
+    return cell_id_ != other.cell_id_ || point_it_ != other.point_it_;
+  }
+  
+};
+
+EgoCircle::iterator EgoCircle::begin()
+{
+  for(int i = 0; i < cells_.size(); i++)
+  {
+    if(cells_[i].points_.size() > 0)
+    {
+      return EgoCircle::iterator(*this,i,cells_[i].points_.begin());
+    }
+  }
+  return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
+}
+
+EgoCircle::iterator EgoCircle::end()
+{
+  return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
+}
+
 class EgoCircleROS
 {
   typedef tf2_ros::MessageFilter<nav_msgs::Odometry> TF_Filter;
@@ -211,10 +333,13 @@ private:
   
   message_filters::Subscriber<nav_msgs::Odometry> odom_subscriber_;
   std::shared_ptr<TF_Filter> tf_filter_;
+  ros::Publisher vis_pub_;
+  
   std_msgs::Header old_header_;
   
   std::string odom_frame_id_ = "odom";
   
+public:
   EgoCircle ego_circle_;
   
 public:
@@ -240,19 +365,71 @@ public:
     ego_circle_ = EgoCircle(512);
     
     odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
+    vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
     
+  }
+  
+  void publishPoints()
+  {
+    visualization_msgs::Marker msg = getVisualizationMsg();
+    vis_pub_.publish(msg);
   }
   
 private:
   void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
   {
-    if(old_header_.stamp > ros::Time(0))
+    update(odom_msg->header);
+  }
+  
+  visualization_msgs::Marker getVisualizationMsg()
+  {
+    float scale = .02;
+    
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = odom_frame_id_;
+    marker.header.stamp = old_header_.stamp;
+    marker.type = visualization_msgs::Marker::POINTS;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.ns = "all";
+    marker.color.a = .75;
+    marker.color.g = 1;
+    marker.color.r = 1;
+    marker.scale.x = scale;
+    marker.scale.y = scale;
+    marker.scale.z = scale;
+    
+    
+    for( EgoCircle::iterator it = ego_circle_.begin(); it != ego_circle_.end(); ++it)
     {
-      update(old_header_, odom_msg->header);
+      EgoCircularPoint point = *it;
+      geometry_msgs::Point point_msg;
+      point_msg.x = point.x;
+      point_msg.y = point.y;
+      point_msg.z = 0;
+      
+      marker.points.push_back(point_msg);
     }
     
-    old_header_ = odom_msg->header;
+    return marker;
   }
+  
+  bool update(std_msgs::Header new_header)
+  {
+    bool success = true;
+    
+    if(old_header_.stamp > ros::Time(0))
+    {
+      success = update(old_header_, new_header);
+    }
+    
+    if(success)
+    {
+      old_header_ = new_header;
+      publishPoints();
+    }
+    return success;
+  }
+  
   
   bool update(std_msgs::Header old_header, std_msgs::Header new_header)
   {
@@ -262,12 +439,14 @@ private:
       geometry_msgs::TransformStamped trans = tf_buffer_.lookupTransform(new_header.frame_id, new_header.stamp,
                                                                       old_header.frame_id, old_header.stamp,
                                                                       odom_frame_id_); 
+      ego_circle_.applyTransform(trans);      
     }
     catch (tf2::TransformException &ex) 
     {
       ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
+      return false;
     }
-
+    return true;
   }
   
 };
@@ -275,23 +454,39 @@ private:
 
 std::vector<EgoCircularPoint> makePoints(int num)
 {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  
   ROS_INFO_STREAM("Making " << num << " points");
   std::vector<EgoCircularPoint> points;
   
   for(int i = 0; i < num; i++)
   {
+    //float d = std::fmod(i,4);
+    float d = std::generate_canonical<double,10>(gen);
     float angle = 6.0 /num * i;
-    float x = std::sin(angle)*i;
-    float y = std::cos(angle)*i;
+    float x = std::sin(angle)*d;
+    float y = std::cos(angle)*d;
     EgoCircularPoint point(x,y);
     points.push_back(point);
   }
   return points;
 }
 
-int main()
+int main(int argc, char **argv)
 {
-  EgoCircle circle(512);
+  std::string name= "ego_circle_tester";
+  ros::init(argc, argv, name);
+  ros::start();
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
+  
+  EgoCircleROS circle_wrapper;
+  circle_wrapper.init();
+  
+  EgoCircle& circle = circle_wrapper.ego_circle_;
+  
+  //EgoCircle circle(512);
   circle.insertPoints(makePoints(500));
   circle.printPoints();
   
@@ -300,4 +495,6 @@ int main()
   trans.transform.rotation.w = 1;
   circle.applyTransform(trans);
   circle.printPoints();
+  
+  ros::spin();
 }
