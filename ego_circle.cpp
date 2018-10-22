@@ -99,7 +99,7 @@ struct EgoCircularCell
   
   void insertPoint(EgoCircularPoint point)
   {
-    removeCloserPoints(point);
+    //removeCloserPoints(point);
     points_[point] = point;
   }
   
