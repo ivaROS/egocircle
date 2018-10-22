@@ -207,7 +207,7 @@ struct EgoCircle
     
     ros::WallTime end = ros::WallTime::now();
     
-    ROS_INFO_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
+    ROS_DEBUG_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
     
   }
   
@@ -239,6 +239,8 @@ public:
     cell_id_(cell_id),
     point_it_(point_it)
   {}
+  
+  int getCell() { return cell_id_; }
   
   EgoCircleIter & operator++() 
   {
@@ -323,6 +325,72 @@ EgoCircle::iterator EgoCircle::end()
   return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
 }
 
+
+
+
+std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
+{
+  
+  confidence = std::min(confidence, max_conf);
+  
+  //https://stackoverflow.com/questions/12875486/what-is-the-algorithm-to-create-colors-for-a-heatmap
+  float fH = (1.0 - (confidence / max_conf)) * 240;
+  float fS = 1.0;
+  float fV = .5;
+  
+  //https://gist.github.com/fairlight1337/4935ae72bcbcc1ba5c72
+  float fC = fV * fS; // Chroma
+  float fHPrime = fmod(fH / 60.0, 6);
+  float fX = fC * (1 - fabs(fmod(fHPrime, 2) - 1));
+  float fM = fV - fC;
+  
+  float fB, fR, fG;
+  
+  if(0 <= fHPrime && fHPrime < 1) {
+    fR = fC;
+    fG = fX;
+    fB = 0;
+  } else if(1 <= fHPrime && fHPrime < 2) {
+    fR = fX;
+    fG = fC;
+    fB = 0;
+  } else if(2 <= fHPrime && fHPrime < 3) {
+    fR = 0;
+    fG = fC;
+    fB = fX;
+  } else if(3 <= fHPrime && fHPrime < 4) {
+    fR = 0;
+    fG = fX;
+    fB = fC;
+  } else if(4 <= fHPrime && fHPrime < 5) {
+    fR = fX;
+    fG = 0;
+    fB = fC;
+  } else if(5 <= fHPrime && fHPrime < 6) {
+    fR = fC;
+    fG = 0;
+    fB = fX;
+  } else {
+    fR = 0;
+    fG = 0;
+    fB = 0;
+  }
+  
+  fR += fM;
+  fG += fM;
+  fB += fM;
+  
+  std_msgs::ColorRGBA color;
+  color.a = 1.0;
+  color.r = fR;
+  color.b = fB;
+  color.g = fG;
+  
+  return color;
+}
+
+
+
 class EgoCircleROS
 {
   typedef tf2_ros::MessageFilter<nav_msgs::Odometry> TF_Filter;
@@ -358,7 +426,8 @@ public:
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
     
-    tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_);
+    //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
+    tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
     tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
     tf_filter_->setTolerance(ros::Duration(0.01));
     
@@ -378,7 +447,10 @@ public:
 private:
   void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
   {
-    update(odom_msg->header);
+    std_msgs::Header header = odom_msg->header;
+    header.frame_id = odom_msg->child_frame_id;
+    
+    update(header);
   }
   
   visualization_msgs::Marker getVisualizationMsg()
@@ -386,29 +458,39 @@ private:
     float scale = .02;
     
     visualization_msgs::Marker marker;
-    marker.header.frame_id = odom_frame_id_;
-    marker.header.stamp = old_header_.stamp;
+    //marker.header.frame_id = odom_frame_id_;
+    //marker.header.stamp = old_header_.stamp;
+    marker.header = old_header_;
     marker.type = visualization_msgs::Marker::POINTS;
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "all";
-    marker.color.a = .75;
-    marker.color.g = 1;
-    marker.color.r = 1;
+//     marker.color.a = .75;
+//     marker.color.g = 1;
+//     marker.color.r = 1;
     marker.scale.x = scale;
     marker.scale.y = scale;
     marker.scale.z = scale;
     
+    int num_cells = ego_circle_.cells_.size();
     
-    for(auto&& point : ego_circle_)
+    
+    for( EgoCircle::iterator it = ego_circle_.begin(); it != ego_circle_.end(); ++it)
     {
+      EgoCircularPoint point = *it;
       geometry_msgs::Point point_msg;
       point_msg.x = point.x;
       point_msg.y = point.y;
       point_msg.z = 0;
       
+      int cell_id = it.getCell();
+      std_msgs::ColorRGBA color = getConfidenceColor(cell_id, num_cells);
+      
       marker.points.push_back(point_msg);
+      marker.colors.push_back(color);
     }
     
+    ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
+
     return marker;
   }
   
@@ -487,13 +569,13 @@ int main(int argc, char **argv)
   
   //EgoCircle circle(512);
   circle.insertPoints(makePoints(500));
-  circle.printPoints();
+//   circle.printPoints();
   
-  geometry_msgs::TransformStamped trans;
-  trans.transform.translation.x = 1;
-  trans.transform.rotation.w = 1;
-  circle.applyTransform(trans);
-  circle.printPoints();
+//   geometry_msgs::TransformStamped trans;
+//   trans.transform.translation.x = 1;
+//   trans.transform.rotation.w = 1;
+//   circle.applyTransform(trans);
+//   circle.printPoints();
   
   ros::spin();
 }
