@@ -182,13 +182,18 @@ struct EgoCircle
   {
     std::vector<EgoCircularCell> cells(cells_.size());
     
+    int num_points = 0;
+    
     for(auto cell : cells_)
     {
       for(auto point : cell)
       {
         insertPoint(cells, point.second);
+        num_points++;
       }
     }
+    
+    ROS_INFO_STREAM("Updated " << num_points << " points");
     
     cells_ = cells; //TODO: hold onto current and previous cell vectors; clear each cell after copying points from it, and std::swap vectors here
     
@@ -207,7 +212,7 @@ struct EgoCircle
     
     ros::WallTime end = ros::WallTime::now();
     
-    ROS_DEBUG_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
+    ROS_INFO_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
     
   }
   
@@ -220,6 +225,22 @@ struct EgoCircle
       cell.printPoints();
       id++;
     }
+  }
+  
+  void countPoints() const
+  {
+    int num_points = 0;
+    
+    for(auto cell : cells_)
+    {
+      for(auto point : cell)
+      {
+        num_points++;
+      }
+    }
+    
+    ROS_INFO_STREAM("Counted " << num_points << " points");
+    
   }
   
 };
@@ -317,7 +338,7 @@ EgoCircle::iterator EgoCircle::begin()
       return EgoCircle::iterator(*this,i,cells_[i].points_.begin());
     }
   }
-  return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
+  return end();
 }
 
 EgoCircle::iterator EgoCircle::end()
@@ -489,8 +510,9 @@ private:
       marker.colors.push_back(color);
     }
     
-    ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
-
+    //ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
+    ROS_INFO_STREAM("Publishing " << marker.points.size() << " points");
+    
     return marker;
   }
   
@@ -567,15 +589,47 @@ int main(int argc, char **argv)
   
   EgoCircle& circle = circle_wrapper.ego_circle_;
   
+  circle.countPoints();
   //EgoCircle circle(512);
   circle.insertPoints(makePoints(500));
 //   circle.printPoints();
+  circle.countPoints();
   
-//   geometry_msgs::TransformStamped trans;
-//   trans.transform.translation.x = 1;
-//   trans.transform.rotation.w = 1;
-//   circle.applyTransform(trans);
+  circle_wrapper.publishPoints();
+  circle.countPoints();
+  
+  geometry_msgs::TransformStamped trans;
+  trans.transform.rotation.w = 1;
+  circle.applyTransform(trans);
+  circle_wrapper.publishPoints();
+  
+  circle_wrapper.publishPoints();
+  
+  circle.countPoints();
+  
+  
+  circle.updateCells();
+  circle.countPoints();
+  
+  circle_wrapper.publishPoints();
+  
+  
+  circle.applyTransform(trans);
+  circle.countPoints();
+  
+  circle_wrapper.publishPoints();
+  
+  circle.applyTransform(trans);
+  circle.countPoints();
+  
+  circle_wrapper.publishPoints();
+  
+  trans.transform.translation.x = 1;
+  circle.applyTransform(trans);
+  circle_wrapper.publishPoints();
+  
+  
 //   circle.printPoints();
   
-  ros::spin();
+//  ros::spin();
 }
