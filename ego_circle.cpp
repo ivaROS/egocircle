@@ -184,7 +184,7 @@ struct EgoCircle
     
     for(auto cell : cells_)
     {
-      for(auto point : cell.points_)
+      for(auto point : cell)
       {
         insertPoint(cells, point.second);
       }
@@ -399,9 +399,8 @@ private:
     marker.scale.z = scale;
     
     
-    for( EgoCircle::iterator it = ego_circle_.begin(); it != ego_circle_.end(); ++it)
+    for(auto&& point : ego_circle_)
     {
-      EgoCircularPoint point = *it;
       geometry_msgs::Point point_msg;
       point_msg.x = point.x;
       point_msg.y = point.y;
