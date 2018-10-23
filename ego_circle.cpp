@@ -274,14 +274,15 @@ struct EgoCircle
   std::vector<float> getDepths()
   {
     std::vector<float> depths(cells_.size());
-    for(const auto& cell : cells_)
+    for(int i = 0; i < cells_.size(); i++)
     {
+      const auto& cell = cells_[i];
       float depth = max_depth_;
       if(cell.points_.size() > 0)
       {
         depth = std::sqrt(cell.points_.begin()->first);
       }
-      depths.push_back(depth);
+      depths[i] = depth;
     }
     return depths;
   }
@@ -301,31 +302,43 @@ struct EgoCircle
   
   int getN(float depth)
   {
-    
+    int n = inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2)));
+    if(n > 3)
+    {
+      int a = 3;
+    }
+    return n;
   }
   
-  bool inflateDepths(std::vector<float>& depths)
+  std::vector<float> inflateDepths(const std::vector<float>& depths)
   {
-
+    std::vector<float> inflated_depths(depths.size());
+    
     std::vector<int> ns(depths.size());
     for(int i = 0; i < depths.size(); i++)
     {
       ns[i] = getN(depths[i]);
-      depths[i]-=inscribed_radius_;
+      //depths[i]-=inscribed_radius_;
     }
-    
+    int n;
     for(int i = 0; i < depths.size(); i++)
     {
-      int n = ns[i];
+      n = ns[i];
       
       for(int j = i - n; j < i + n; j++)
       {
-        int ind = (j >=0) ? j : depths.size() + j;
-        depths[j] = std::min(depths[j],depths[i]);
+        int ind = (j <0) ? depths.size() + j : ((j >= depths.size()) ? j - depths.size() : j );
+        inflated_depths[ind] = std::min(depths[ind],depths[i]) -inscribed_radius_;
       }
+      
+//       for(int j = i+1; j <= i + n; j++)
+//       {
+//         int ind = (j < depths.size()) ? j : j - depths.size();
+//         inflated_depths[ind] = std::min(depths[ind]-inscribed_radius_,depths[i]-inscribed_radius_);
+//       }
     }
     
-    
+    return inflated_depths;
   }
   
   void printPoints() const
@@ -721,12 +734,13 @@ private:
   sensor_msgs::LaserScan getDepthScan()
   {
     std::vector<float> depths = ego_circle_.getDepths();
+    
     sensor_msgs::LaserScan scan;
     scan.header = old_header_;
     scan.angle_min= -std::acos(-1);
     scan.angle_max= std::acos(-1);
     scan.angle_increment = 1/ego_circle_.scale_;
-    scan.ranges = depths;
+    scan.ranges = ego_circle_.inflateDepths(depths);
     scan.range_min = 0;
     scan.range_max = 20;
     return scan;
