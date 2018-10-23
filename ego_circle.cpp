@@ -16,6 +16,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/filter.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+#include <deque>
 
 class EgoCircleIter;
 
@@ -91,12 +92,12 @@ void applyTransform(EgoCircularPoint& point, SE2Transform transform)
 struct EgoCircularCell
 {
   //std::vector<float> x,y;
-  std::map<EgoCircularPoint, EgoCircularPoint> points_;
-  typedef std::map<EgoCircularPoint, EgoCircularPoint>::iterator iterator;
+  std::map<float, EgoCircularPoint> points_;
+  typedef std::map<float, EgoCircularPoint>::iterator iterator;
   
   void removeCloserPoints(EgoCircularPoint point)
   {
-    auto upper = points_.upper_bound(point);
+    auto upper = points_.upper_bound(point.getKey());
     points_.erase(points_.begin(),upper);
   }
   
@@ -107,7 +108,7 @@ struct EgoCircularCell
       removeCloserPoints(point);
     }
     //points_[point] = point;
-    auto res = points_.insert(std::pair<EgoCircularPoint, EgoCircularPoint>(point,point));
+    auto res = points_.insert(std::pair<float, EgoCircularPoint>(point.getKey(),point));
     if(!res.second)
     {
       EgoCircularPoint existing = (*res.first).second;
@@ -150,6 +151,9 @@ typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
 struct EgoCircle
 {
   std::vector<EgoCircularCell> cells_;
+  
+  float max_depth_ = 5;
+  float inscribed_radius_ = .18;
   
   friend class EgoCircleIter;
   typedef EgoCircleIter iterator;
@@ -197,7 +201,7 @@ struct EgoCircle
     for(auto point : points)
     {
       EgoCircularPoint ec_pnt(point.x, point.y);
-      insertPoint(cells_, ec_pnt, false); //should be true
+      insertPoint(cells_, ec_pnt, true); //should be true
     }
   }
   
@@ -244,6 +248,63 @@ struct EgoCircle
     ros::WallTime end = ros::WallTime::now();
     
     ROS_DEBUG_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
+    
+  }
+  
+  std::vector<float> getDepths()
+  {
+    std::vector<float> depths(cells_.size());
+    for(const auto& cell : cells_)
+    {
+      float depth = max_depth_;
+      if(cell.points_.size() > 0)
+      {
+        depth = std::sqrt(cell.points_.begin()->first);
+      }
+      depths.push_back(depth);
+    }
+    return depths;
+  }
+  
+  std::vector<EgoCircularPoint> getNearestPoints()
+  {
+    std::vector<EgoCircularPoint> points(cells_.size());
+    for(const auto& cell : cells_)
+    {
+      if(cell.points_.size() > 0)
+      {
+        points.push_back(cell.points_.begin()->second);
+      }
+    }
+    return points;
+  }
+  
+  int getN(float depth)
+  {
+    
+  }
+  
+  bool inflateDepths(std::vector<float>& depths)
+  {
+
+    std::vector<int> ns(depths.size());
+    for(int i = 0; i < depths.size(); i++)
+    {
+      ns[i] = getN(depths[i]);
+      depths[i]-=inscribed_radius_;
+    }
+    
+    for(int i = 0; i < depths.size(); i++)
+    {
+      int n = ns[i];
+      
+      for(int j = i - n; j < i + n; j++)
+      {
+        int ind = (j >=0) ? j : depths.size() + j;
+        depths[j] = std::min(depths[j],depths[i]);
+      }
+    }
+    
     
   }
   
@@ -504,7 +565,11 @@ public:
   
   void publishPoints()
   {
+    //TODO: publish a marker array composed of these markers
     visualization_msgs::Marker msg = getVisualizationMsg();
+    vis_pub_.publish(msg);
+    
+    msg = getVisualizationMsgNearest();
     vis_pub_.publish(msg);
   }
   
@@ -591,6 +656,41 @@ private:
     
     ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
     ROS_DEBUG_STREAM("Publishing " << marker.points.size() << " points");
+    
+    return marker;
+  }
+  
+  visualization_msgs::Marker getVisualizationMsgNearest()
+  {
+    float scale = .02;
+    
+    visualization_msgs::Marker marker;
+    //marker.header.frame_id = odom_frame_id_;
+    //marker.header.stamp = old_header_.stamp;
+    marker.header = old_header_;
+    marker.type = visualization_msgs::Marker::POINTS;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.ns = "nearest";
+    marker.color.a = .75;
+    marker.color.g = 1;
+    marker.color.r = 1;
+    marker.scale.x = scale;
+    marker.scale.y = scale;
+    marker.scale.z = scale;
+    
+    int num_cells = ego_circle_.cells_.size();
+    
+    std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
+    
+    for(const auto& point : points)
+    {
+      geometry_msgs::Point point_msg;
+      point_msg.x = point.x;
+      point_msg.y = point.y;
+      point_msg.z = 0;
+      
+      marker.points.push_back(point_msg);
+    }
     
     return marker;
   }
