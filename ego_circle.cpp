@@ -12,7 +12,10 @@
 #include <tf2_ros/message_filter.h>
 #include <nav_msgs/Odometry.h>
 #include <visualization_msgs/Marker.h>
-
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/filter.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 
 class EgoCircleIter;
 
@@ -140,6 +143,8 @@ struct EgoCircularCell
   }
 };
 
+typedef pcl::PointXYZ PCLPoint;
+typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
 
 
 struct EgoCircle
@@ -158,7 +163,7 @@ struct EgoCircle
   iterator begin();
   iterator end();
   
-  
+  //TODO: Do I need to perform rounding or is that part of casting?
   int getIndex(EgoCircularPoint point)
   {
     float angle = std::atan2(point.y,point.x);
@@ -185,6 +190,15 @@ struct EgoCircle
   void insertPoints(std::vector<EgoCircularPoint> points, bool clearing)
   {
     insertPoints(cells_, points, clearing);
+  }
+  
+  void insertPoints(PCLPointCloud points)
+  {
+    for(auto point : points)
+    {
+      EgoCircularPoint ec_pnt(point.x, point.y);
+      insertPoint(cells_, ec_pnt, false); //should be true
+    }
   }
   
   void updateCells()
@@ -431,19 +445,25 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
 
 class EgoCircleROS
 {
-  typedef tf2_ros::MessageFilter<nav_msgs::Odometry> TF_Filter;
+  
+
+  
+  typedef tf2_ros::MessageFilter<sensor_msgs::PointCloud2> TF_Filter;
 private:
   ros::NodeHandle nh_, pnh_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
   
   message_filters::Subscriber<nav_msgs::Odometry> odom_subscriber_;
+  message_filters::Subscriber<sensor_msgs::PointCloud2> pc_subscriber_;
+  
   std::shared_ptr<TF_Filter> tf_filter_;
   ros::Publisher vis_pub_;
   
   std_msgs::Header old_header_;
   
   std::string odom_frame_id_ = "odom";
+  std::string base_frame_id_ = "base_footprint";
   
 public:
   EgoCircle ego_circle_;
@@ -463,13 +483,19 @@ public:
   {
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
+    std::string pointcloud_topic = "/converted_pc";
     
-    //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
-    tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
-    tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
+    
+    tf_filter_ = std::make_shared<TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
+    tf_filter_->registerCallback(boost::bind(&EgoCircleROS::pointcloudCB, this, _1));
+    
+    //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
+    //tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
     tf_filter_->setTolerance(ros::Duration(0.01));
     
     ego_circle_ = EgoCircle(512);
+    
+    pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
     odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
@@ -489,6 +515,42 @@ private:
     header.frame_id = odom_msg->child_frame_id;
     
     update(header);
+  }
+  
+  void pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
+  {
+    std_msgs::Header header = pointcloud_msg->header;
+    header.frame_id = base_frame_id_;
+    
+    update(header);
+    
+    ros::WallTime starttime = ros::WallTime::now();
+    
+    try 
+    {
+      geometry_msgs::TransformStamped transformStamped;
+      transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, pointcloud_msg->header.frame_id, header.stamp,
+                                                  odom_frame_id_); 
+    
+      sensor_msgs::PointCloud2 transformed_cloud;
+      
+      tf2::doTransform(*pointcloud_msg, transformed_cloud, transformStamped);
+      
+      PCLPointCloud::Ptr cloud (new PCLPointCloud);
+      
+      pcl::fromROSMsg(*pointcloud_msg, *cloud);
+      
+      PCLPointCloud::Ptr new_cloud(new PCLPointCloud);
+      std::vector<int> mapping;
+      //Is this necessary?
+      pcl::removeNaNFromPointCloud(*cloud, *new_cloud, mapping);
+      
+      ego_circle_.insertPoints(*new_cloud);
+    }
+    catch (tf2::TransformException &ex) 
+    {
+      ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
+    }
   }
   
   visualization_msgs::Marker getVisualizationMsg()
@@ -606,6 +668,6 @@ int main(int argc, char **argv)
   
   EgoCircle& circle = circle_wrapper.ego_circle_;
   
-  circle.insertPoints(makePoints(500),false);
+  //circle.insertPoints(makePoints(500),false);
   ros::spin();
 }
