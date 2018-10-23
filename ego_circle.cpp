@@ -97,9 +97,12 @@ struct EgoCircularCell
     points_.erase(points_.begin(),upper);
   }
   
-  void insertPoint(EgoCircularPoint point)
+  void insertPoint(EgoCircularPoint point, bool clearing)
   {
-    //removeCloserPoints(point);
+    if(clearing)
+    {
+      removeCloserPoints(point);
+    }
     points_[point] = point;
   }
   
@@ -159,23 +162,23 @@ struct EgoCircle
     return ind;
   }
   
-  void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point)
+  void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing)
   {
     int ind = getIndex(point);
-    cells[ind].insertPoint(point);
+    cells[ind].insertPoint(point, clearing);
   }
   
-  void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points)
+  void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
   {
     for(auto point : points)
     {
-      insertPoint(cells, point);
+      insertPoint(cells, point, clearing);
     }
   }
   
-  void insertPoints(std::vector<EgoCircularPoint> points)
+  void insertPoints(std::vector<EgoCircularPoint> points, bool clearing)
   {
-    insertPoints(cells_, points);
+    insertPoints(cells_, points, clearing);
   }
   
   void updateCells()
@@ -188,10 +191,18 @@ struct EgoCircle
     {
       for(auto point : cell)
       {
-        insertPoint(cells, point.second);
+        insertPoint(cells, point.second, false);
         num_points++;
       }
     }
+    
+    //NOTE: This should work, but requires properly fully declaring the iterator class beforehand
+//     for(auto point : *this)
+//     {
+//       insertPoint(cells, point);
+//       num_points++;
+//     }
+
     
     ROS_INFO_STREAM("Updated " << num_points << " points");
     
@@ -591,7 +602,7 @@ int main(int argc, char **argv)
   
   circle.countPoints();
   //EgoCircle circle(512);
-  circle.insertPoints(makePoints(500));
+  circle.insertPoints(makePoints(500),false);
 //   circle.printPoints();
   circle.countPoints();
   
