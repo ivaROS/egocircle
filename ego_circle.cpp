@@ -89,10 +89,28 @@ void applyTransform(EgoCircularPoint& point, SE2Transform transform)
   point.y = transform.r3 * x + transform.r4 * y + transform.t1;
 }
 
+// Begin code copied from http://eliang.blogspot.com/2011/07/gotcha-of-c-map-and-set.html
+inline float discretize(float a)
+{
+  return floorf(a * 100.0f) / 100.0f;
+}
+struct FloatCmp
+{
+  bool operator()(float a, float b)
+  {
+    float aa = discretize(a);
+    float bb = discretize(b);
+    if (aa == bb)
+      return false;
+    return aa < bb;
+  }
+};
+// End copied code
+
 struct EgoCircularCell
 {
   //std::vector<float> x,y;
-  std::map<float, EgoCircularPoint> points_;
+  std::map<float, EgoCircularPoint, FloatCmp> points_;
   typedef std::map<float, EgoCircularPoint>::iterator iterator;
   
   void removeCloserPoints(EgoCircularPoint point)
