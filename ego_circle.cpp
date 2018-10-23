@@ -286,7 +286,7 @@ struct EgoCircle
   
   std::vector<EgoCircularPoint> getNearestPoints()
   {
-    std::vector<EgoCircularPoint> points(cells_.size());
+    std::vector<EgoCircularPoint> points;
     for(const auto& cell : cells_)
     {
       if(cell.points_.size() > 0)
