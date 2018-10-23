@@ -103,7 +103,13 @@ struct EgoCircularCell
     {
       removeCloserPoints(point);
     }
-    points_[point] = point;
+    //points_[point] = point;
+    auto res = points_.insert(std::pair<EgoCircularPoint, EgoCircularPoint>(point,point));
+    if(!res.second)
+    {
+      EgoCircularPoint existing = (*res.first).second;
+      ROS_WARN_STREAM("Did not insert (" << point.x << "," << point.y << "), already contains (" << existing.x << "," << existing.y << ")");
+    }
   }
   
   void applyTransform(SE2Transform transform)
@@ -204,7 +210,7 @@ struct EgoCircle
 //     }
 
     
-    ROS_INFO_STREAM("Updated " << num_points << " points");
+    ROS_DEBUG_STREAM("Updated " << num_points << " points");
     
     cells_ = cells; //TODO: hold onto current and previous cell vectors; clear each cell after copying points from it, and std::swap vectors here
     
@@ -223,7 +229,7 @@ struct EgoCircle
     
     ros::WallTime end = ros::WallTime::now();
     
-    ROS_INFO_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
+    ROS_DEBUG_STREAM_NAMED("timing", "Applying transform took " <<  (end - start).toSec() * 1e3 << "ms");
     
   }
   
@@ -521,8 +527,8 @@ private:
       marker.colors.push_back(color);
     }
     
-    //ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
-    ROS_INFO_STREAM("Publishing " << marker.points.size() << " points");
+    ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
+    ROS_DEBUG_STREAM("Publishing " << marker.points.size() << " points");
     
     return marker;
   }
@@ -600,47 +606,6 @@ int main(int argc, char **argv)
   
   EgoCircle& circle = circle_wrapper.ego_circle_;
   
-  circle.countPoints();
-  //EgoCircle circle(512);
   circle.insertPoints(makePoints(500),false);
-//   circle.printPoints();
-  circle.countPoints();
-  
-  circle_wrapper.publishPoints();
-  circle.countPoints();
-  
-  geometry_msgs::TransformStamped trans;
-  trans.transform.rotation.w = 1;
-  circle.applyTransform(trans);
-  circle_wrapper.publishPoints();
-  
-  circle_wrapper.publishPoints();
-  
-  circle.countPoints();
-  
-  
-  circle.updateCells();
-  circle.countPoints();
-  
-  circle_wrapper.publishPoints();
-  
-  
-  circle.applyTransform(trans);
-  circle.countPoints();
-  
-  circle_wrapper.publishPoints();
-  
-  circle.applyTransform(trans);
-  circle.countPoints();
-  
-  circle_wrapper.publishPoints();
-  
-  trans.transform.translation.x = 1;
-  circle.applyTransform(trans);
-  circle_wrapper.publishPoints();
-  
-  
-//   circle.printPoints();
-  
-//  ros::spin();
+  ros::spin();
 }
