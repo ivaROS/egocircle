@@ -111,7 +111,7 @@ struct EgoCircularCell
     if(!res.second)
     {
       EgoCircularPoint existing = (*res.first).second;
-      ROS_WARN_STREAM("Did not insert (" << point.x << "," << point.y << "), already contains (" << existing.x << "," << existing.y << ")");
+      ROS_DEBUG_STREAM("Did not insert (" << point.x << "," << point.y << "), already contains (" << existing.x << "," << existing.y << ")");
     }
   }
   
@@ -497,7 +497,7 @@ public:
     
     pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
-    odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
+    //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
     
   }
