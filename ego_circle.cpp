@@ -17,6 +17,7 @@
 #include <pcl/filters/filter.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <deque>
+#include <sensor_msgs/LaserScan.h>
 
 class EgoCircleIter;
 
@@ -110,7 +111,7 @@ struct FloatCmp
 struct EgoCircularCell
 {
   //std::vector<float> x,y;
-  std::map<float, EgoCircularPoint, FloatCmp> points_;
+  std::map<float, EgoCircularPoint> points_;
   typedef std::map<float, EgoCircularPoint>::iterator iterator;
   
   void removeCloserPoints(EgoCircularPoint point)
@@ -123,10 +124,11 @@ struct EgoCircularCell
   {
     if(clearing)
     {
-      removeCloserPoints(point);
+      //removeCloserPoints(point);  //TODO: uncomment this when done testing
     }
     //points_[point] = point;
-    auto res = points_.insert(std::pair<float, EgoCircularPoint>(point.getKey(),point));
+    float key = discretize(point.getKey());
+    auto res = points_.insert(std::pair<float, EgoCircularPoint>(key,point));
     if(!res.second)
     {
       EgoCircularPoint existing = (*res.first).second;
@@ -172,12 +174,13 @@ struct EgoCircle
   
   float max_depth_ = 5;
   float inscribed_radius_ = .18;
+  float scale_;
   
   friend class EgoCircleIter;
   typedef EgoCircleIter iterator;
   
   
-  EgoCircle(int size)
+  EgoCircle(int size) :  scale_(size/(2*std::acos(-1)))
   {
     cells_.resize(size);
   }
@@ -189,9 +192,8 @@ struct EgoCircle
   int getIndex(EgoCircularPoint point)
   {
     float angle = std::atan2(point.y,point.x);
-    float scale = cells_.size()/(2*std::acos(-1));  //Should make this a member variable
     
-    int ind = angle * scale + cells_.size() / 2;
+    int ind = angle * scale_ + cells_.size() / 2;
     return ind;
   }
   
@@ -537,7 +539,7 @@ private:
   message_filters::Subscriber<sensor_msgs::PointCloud2> pc_subscriber_;
   
   std::shared_ptr<TF_Filter> tf_filter_;
-  ros::Publisher vis_pub_;
+  ros::Publisher vis_pub_, scan_pub_;
   
   std_msgs::Header old_header_;
   
@@ -578,7 +580,7 @@ public:
     
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
-    
+    scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("point_scan",5);
   }
   
   void publishPoints()
@@ -589,6 +591,9 @@ public:
     
     msg = getVisualizationMsgNearest();
     vis_pub_.publish(msg);
+    
+    sensor_msgs::LaserScan scan = getDepthScan();
+    scan_pub_.publish(scan);
   }
   
 private:
@@ -711,6 +716,20 @@ private:
     }
     
     return marker;
+  }
+  
+  sensor_msgs::LaserScan getDepthScan()
+  {
+    std::vector<float> depths = ego_circle_.getDepths();
+    sensor_msgs::LaserScan scan;
+    scan.header = old_header_;
+    scan.angle_min= -std::acos(-1);
+    scan.angle_max= std::acos(-1);
+    scan.angle_increment = 1/ego_circle_.scale_;
+    scan.ranges = depths;
+    scan.range_min = 0;
+    scan.range_max = 20;
+    return scan;
   }
   
   bool update(std_msgs::Header new_header)
