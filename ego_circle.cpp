@@ -638,7 +638,7 @@ private:
       
       PCLPointCloud::Ptr cloud (new PCLPointCloud);
       
-      pcl::fromROSMsg(*pointcloud_msg, *cloud);
+      pcl::fromROSMsg(transformed_cloud, *cloud);
       
       PCLPointCloud::Ptr new_cloud(new PCLPointCloud);
       std::vector<int> mapping;
