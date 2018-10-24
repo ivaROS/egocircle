@@ -203,6 +203,7 @@ struct EgoCircle
     cells[ind].insertPoint(point, clearing);
   }
   
+  //TODO: if clearing, should clear first, then add all the points, otherwise risk clearing new points too
   void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
   {
     for(auto point : points)
@@ -328,7 +329,7 @@ struct EgoCircle
       for(int j = i - n; j < i + n; j++)
       {
         int ind = (j <0) ? depths.size() + j : ((j >= depths.size()) ? j - depths.size() : j );
-        inflated_depths[ind] = std::min(depths[ind] -inscribed_radius_,inflated_depths[ind]); //Better to subtract each time, or construct separate depths array and subtract once?
+        inflated_depths[ind] = std::min(depths[i] -inscribed_radius_,inflated_depths[ind]);
       }
       
 //       for(int j = i+1; j <= i + n; j++)
