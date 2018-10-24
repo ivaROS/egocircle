@@ -552,7 +552,7 @@ private:
   message_filters::Subscriber<sensor_msgs::PointCloud2> pc_subscriber_;
   
   std::shared_ptr<TF_Filter> tf_filter_;
-  ros::Publisher vis_pub_, scan_pub_;
+  ros::Publisher vis_pub_, scan_pub_, inflated_scan_pub_;
   
   std_msgs::Header old_header_;
   
@@ -594,6 +594,7 @@ public:
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
     scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("point_scan",5);
+    inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
   }
   
   void publishPoints()
@@ -605,8 +606,6 @@ public:
     msg = getVisualizationMsgNearest();
     vis_pub_.publish(msg);
     
-    sensor_msgs::LaserScan scan = getDepthScan();
-    scan_pub_.publish(scan);
   }
   
 private:
@@ -731,7 +730,7 @@ private:
     return marker;
   }
   
-  sensor_msgs::LaserScan getDepthScan()
+  void publishDepthScans()
   {
     std::vector<float> depths = ego_circle_.getDepths();
     
@@ -740,10 +739,15 @@ private:
     scan.angle_min= -std::acos(-1);
     scan.angle_max= std::acos(-1);
     scan.angle_increment = 1/ego_circle_.scale_;
-    scan.ranges = ego_circle_.inflateDepths(depths);
+    scan.ranges = depths;
     scan.range_min = 0;
     scan.range_max = 20;
-    return scan;
+
+    scan_pub_.publish(scan);
+    
+    scan.ranges = ego_circle_.inflateDepths(depths);
+    
+    inflated_scan_pub_.publish(scan);
   }
   
   bool update(std_msgs::Header new_header)
@@ -759,6 +763,7 @@ private:
     {
       old_header_ = new_header;
       publishPoints();
+      publishDepthScans();
     }
     return success;
   }
