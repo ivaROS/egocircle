@@ -302,7 +302,7 @@ struct EgoCircle
   
   int getN(float depth)
   {
-    int n = inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2)));
+    int n = std::ceil(inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2))));
     if(n > 3)
     {
       int a = 3;
@@ -312,13 +312,13 @@ struct EgoCircle
   
   std::vector<float> inflateDepths(const std::vector<float>& depths)
   {
-    std::vector<float> inflated_depths(depths.size());
+    std::vector<float> inflated_depths = depths; //(depths.size());
     
     std::vector<int> ns(depths.size());
     for(int i = 0; i < depths.size(); i++)
     {
       ns[i] = getN(depths[i]);
-      //depths[i]-=inscribed_radius_;
+      //inflated_depths[i]-=inscribed_radius_;
     }
     int n;
     for(int i = 0; i < depths.size(); i++)
@@ -328,7 +328,7 @@ struct EgoCircle
       for(int j = i - n; j < i + n; j++)
       {
         int ind = (j <0) ? depths.size() + j : ((j >= depths.size()) ? j - depths.size() : j );
-        inflated_depths[ind] = std::min(depths[ind],depths[i]) -inscribed_radius_;
+        inflated_depths[ind] = std::min(depths[ind] -inscribed_radius_,inflated_depths[ind]); //Better to subtract each time, or construct separate depths array and subtract once?
       }
       
 //       for(int j = i+1; j <= i + n; j++)
