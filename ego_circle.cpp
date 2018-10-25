@@ -1,4 +1,5 @@
 
+#include <pips_dwa_controller/ego_circle.h>
 #include <map>
 #include <vector>
 #include <cmath>
@@ -19,108 +20,16 @@
 #include <deque>
 #include <sensor_msgs/LaserScan.h>
 
-class EgoCircleIter;
-
-
-struct EgoCircularPoint
+namespace ego_circle
 {
-  float x,y; // May add 'depth', if needed
-  
-  EgoCircularPoint()
-  {}
-  
-  EgoCircularPoint(float x, float y) :
-    x(x), y(y) //, d(x*x+y*y)
-    {}
-  
-  float getKey() const
-  {
-    return x*x+y*y;
-  }
-  
-//   bool operator<(const EgoCircularPoint& other) const
-//   {
-//     return getKey() < other.getKey();
-//   }
-  
-};
 
-namespace std
-{
-  template<> struct less<EgoCircularPoint>
-  {
-    bool operator() (const EgoCircularPoint& lhs, const EgoCircularPoint& rhs) const
-    {
-      return lhs.getKey() < rhs.getKey();
-    }
-  };
-}
-
-
-struct SE2Transform
-{
-  float r0,r1,r3,r4,t0,t1;
-  
-  SE2Transform(geometry_msgs::TransformStamped trans)
-  {
-    tf::Quaternion rotationQuaternion = tf::Quaternion(trans.transform.rotation.x,
-                                                       trans.transform.rotation.y,
-                                                       trans.transform.rotation.z,
-                                                       trans.transform.rotation.w);
-    
-    
-    tf::Matrix3x3 tempRotationMatrix = tf::Matrix3x3(rotationQuaternion);
-    
-    r0 = (float) tempRotationMatrix[0].getX();
-    r1 = (float) tempRotationMatrix[0].getY();
-    r3 = (float) tempRotationMatrix[1].getX();
-    r4 = (float) tempRotationMatrix[1].getY();
-    
-    t0 = trans.transform.translation.x;
-    t1 = trans.transform.translation.y;  
-  }
-};
-
-void applyTransform(EgoCircularPoint& point, SE2Transform transform)
-{
-  float x = point.x;
-  float y = point.y;
-  
-  point.x = transform.r0 * x + transform.r1 * y + transform.t0;
-  point.y = transform.r3 * x + transform.r4 * y + transform.t1;
-}
-
-// Begin code copied from http://eliang.blogspot.com/2011/07/gotcha-of-c-map-and-set.html
-inline float discretize(float a)
-{
-  return floorf(a * 100.0f) / 100.0f;
-}
-struct FloatCmp
-{
-  bool operator()(float a, float b)
-  {
-    float aa = discretize(a);
-    float bb = discretize(b);
-    if (aa == bb)
-      return false;
-    return aa < bb;
-  }
-};
-// End copied code
-
-struct EgoCircularCell
-{
-  //std::vector<float> x,y;
-  std::map<float, EgoCircularPoint> points_;
-  typedef std::map<float, EgoCircularPoint>::iterator iterator;
-  
-  void removeCloserPoints(EgoCircularPoint point)
+  void EgoCircularCell::removeCloserPoints(EgoCircularPoint point)
   {
     auto upper = points_.upper_bound(point.getKey());
     points_.erase(points_.begin(),upper);
   }
   
-  void insertPoint(EgoCircularPoint point, bool clearing)
+  void EgoCircularCell::insertPoint(EgoCircularPoint point, bool clearing)
   {
     if(clearing)
     {
@@ -136,25 +45,15 @@ struct EgoCircularCell
     }
   }
   
-  void applyTransform(SE2Transform transform)
+  void EgoCircularCell::applyTransform(SE2Transform transform)
   {
     for(auto& point : points_)
     {
-      ::applyTransform(point.second, transform);
+      ego_circle::applyTransform(point.second, transform);
     }
   }
   
-  iterator begin()
-  {
-    return points_.begin();
-  }
-  
-  iterator end()
-  {
-    return points_.end();
-  }
-  
-  void printPoints() const
+  void EgoCircularCell::printPoints() const
   {
     for(const auto& point : points_)
     {
@@ -162,49 +61,24 @@ struct EgoCircularCell
       ROS_INFO_STREAM("\t\t[" << p.x << "," << p.y << "]");
     }
   }
-};
 
-typedef pcl::PointXYZ PCLPoint;
-typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
-
-
-struct EgoCircle
-{
-  std::vector<EgoCircularCell> cells_;
-  
-  float max_depth_ = 5;
-  float inscribed_radius_ = .18;
-  float scale_;
-  
-  friend class EgoCircleIter;
-  typedef EgoCircleIter iterator;
-  
-  
-  EgoCircle(int size) :  scale_(size/(2*std::acos(-1)))
+  void applyTransform(EgoCircularPoint& point, SE2Transform transform)
   {
-    cells_.resize(size);
-  }
-  
-  iterator begin();
-  iterator end();
-  
-  //TODO: Do I need to perform rounding or is that part of casting?
-  int getIndex(EgoCircularPoint point)
-  {
-    float angle = std::atan2(point.y,point.x);
+    float x = point.x;
+    float y = point.y;
     
-    int ind = angle * scale_ + cells_.size() / 2;
-    return ind;
+    point.x = transform.r0 * x + transform.r1 * y + transform.t0;
+    point.y = transform.r3 * x + transform.r4 * y + transform.t1;
   }
   
-  void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing)
+  void EgoCircle::insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing)
   {
     int ind = getIndex(point);
     cells[ind].insertPoint(point, clearing);
   }
   
   //TODO: if clearing, should clear first, then add all the points, otherwise risk clearing new points too
-  void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
+  void EgoCircle::insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
   {
     for(auto point : points)
     {
@@ -212,12 +86,12 @@ struct EgoCircle
     }
   }
   
-  void insertPoints(std::vector<EgoCircularPoint> points, bool clearing)
+  void EgoCircle::insertPoints(std::vector<EgoCircularPoint> points, bool clearing)
   {
     insertPoints(cells_, points, clearing);
   }
   
-  void insertPoints(PCLPointCloud points)
+  void EgoCircle::insertPoints(PCLPointCloud points)
   {
     for(auto point : points)
     {
@@ -226,7 +100,7 @@ struct EgoCircle
     }
   }
   
-  void updateCells()
+  void EgoCircle::updateCells()
   {
     std::vector<EgoCircularCell> cells(cells_.size());
     
@@ -255,7 +129,7 @@ struct EgoCircle
     
   }
 
-  void applyTransform(geometry_msgs::TransformStamped transform)
+  void EgoCircle::applyTransform(geometry_msgs::TransformStamped transform)
   {
     ros::WallTime start = ros::WallTime::now();
     SE2Transform trans(transform);
@@ -272,7 +146,7 @@ struct EgoCircle
     
   }
   
-  std::vector<float> getDepths()
+  std::vector<float> EgoCircle::getDepths()
   {
     std::vector<float> depths(cells_.size());
     for(int i = 0; i < cells_.size(); i++)
@@ -288,7 +162,7 @@ struct EgoCircle
     return depths;
   }
   
-  std::vector<EgoCircularPoint> getNearestPoints()
+  std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
   {
     std::vector<EgoCircularPoint> points;
     for(const auto& cell : cells_)
@@ -301,7 +175,7 @@ struct EgoCircle
     return points;
   }
   
-  int getN(float depth)
+  int EgoCircle::getN(float depth)
   {
     int n = std::ceil(inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2))));
     if(n > 3)
@@ -311,7 +185,7 @@ struct EgoCircle
     return n;
   }
   
-  std::vector<float> inflateDepths(const std::vector<float>& depths)
+  std::vector<float> EgoCircle::inflateDepths(const std::vector<float>& depths)
   {
     std::vector<float> inflated_depths = depths; //(depths.size());
     
@@ -342,7 +216,7 @@ struct EgoCircle
     return inflated_depths;
   }
   
-  void printPoints() const
+  void EgoCircle::printPoints() const
   {
     int id = 0;
     for(const EgoCircularCell& cell : cells_)
@@ -353,7 +227,7 @@ struct EgoCircle
     }
   }
   
-  void countPoints() const
+  void EgoCircle::countPoints() const
   {
     int num_points = 0;
     
@@ -369,91 +243,7 @@ struct EgoCircle
     
   }
   
-};
 
-
-class EgoCircleIter
-{
-private:
-  EgoCircle& circle_;
-  int cell_id_;
-  EgoCircularCell::iterator point_it_;
-  
-public:
-  
-  EgoCircleIter(EgoCircle& circle, int cell_id, EgoCircularCell::iterator point_it) :
-    circle_(circle),
-    cell_id_(cell_id),
-    point_it_(point_it)
-  {}
-  
-  int getCell() { return cell_id_; }
-  
-  EgoCircleIter & operator++() 
-  {
-    ++point_it_;
-    
-    bool keep_going = true;
-    while(keep_going)
-    {
-      if(point_it_ == circle_.cells_[cell_id_].points_.end())
-      {
-        if(cell_id_ < circle_.cells_.size() - 1)
-        {
-          cell_id_++;
-          point_it_ = circle_.cells_[cell_id_].points_.begin();
-        }
-        else
-        {
-          keep_going = false;
-        }
-      }
-      else
-      {
-        keep_going = false;
-      }
-    }
-    return *this; 
-  }
-  
-  EgoCircleIter operator++(int)
-  {
-    EgoCircleIter clone(*this);
-    
-    ++point_it_;
-    
-    bool keep_going = true;
-    while(keep_going)
-    {
-      if(point_it_ == circle_.cells_[cell_id_].points_.end())
-      {
-        if(cell_id_ < circle_.cells_.size() - 1)
-        {
-          cell_id_++;
-          point_it_ = circle_.cells_[cell_id_].points_.begin();
-        }
-        else
-        {
-          keep_going = false;
-        }
-      }
-      else
-      {
-        keep_going = false;
-      }
-    }
-    
-    return clone;
-  }
-  
-  EgoCircularPoint & operator*() { return (*point_it_).second; }
-  
-  bool operator!=(EgoCircleIter other)
-  {
-    return cell_id_ != other.cell_id_ || point_it_ != other.point_it_;
-  }
-  
-};
 
 EgoCircle::iterator EgoCircle::begin()
 {
@@ -538,34 +328,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
 
 
 
-class EgoCircleROS
-{
-  
-
-  
-  typedef tf2_ros::MessageFilter<sensor_msgs::PointCloud2> TF_Filter;
-private:
-  ros::NodeHandle nh_, pnh_;
-  tf2_ros::Buffer tf_buffer_;
-  tf2_ros::TransformListener tf_listener_;
-  
-  message_filters::Subscriber<nav_msgs::Odometry> odom_subscriber_;
-  message_filters::Subscriber<sensor_msgs::PointCloud2> pc_subscriber_;
-  
-  std::shared_ptr<TF_Filter> tf_filter_;
-  ros::Publisher vis_pub_, scan_pub_, inflated_scan_pub_;
-  
-  std_msgs::Header old_header_;
-  
-  std::string odom_frame_id_ = "odom";
-  std::string base_frame_id_ = "base_footprint";
-  
-public:
-  EgoCircle ego_circle_;
-  
-public:
-  
-  EgoCircleROS(ros::NodeHandle nh = ros::NodeHandle(), ros::NodeHandle pnh=ros::NodeHandle("~")):
+  EgoCircleROS::EgoCircleROS(ros::NodeHandle nh, ros::NodeHandle pnh):
     nh_(nh),
     pnh_(pnh),
     tf_listener_(tf_buffer_),
@@ -574,7 +337,7 @@ public:
     
   }
   
-  bool init()
+  bool EgoCircleROS::init()
   {
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
@@ -598,7 +361,7 @@ public:
     inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
   }
   
-  void publishPoints()
+  void EgoCircleROS::publishPoints()
   {
     //TODO: publish a marker array composed of these markers
     visualization_msgs::Marker msg = getVisualizationMsg();
@@ -609,8 +372,7 @@ public:
     
   }
   
-private:
-  void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
+  void EgoCircleROS::odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
   {
     std_msgs::Header header = odom_msg->header;
     header.frame_id = odom_msg->child_frame_id;
@@ -618,7 +380,7 @@ private:
     update(header);
   }
   
-  void pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
+  void EgoCircleROS::pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
   {
     std_msgs::Header header = pointcloud_msg->header;
     header.frame_id = base_frame_id_;
@@ -654,7 +416,7 @@ private:
     }
   }
   
-  visualization_msgs::Marker getVisualizationMsg()
+  visualization_msgs::Marker EgoCircleROS::getVisualizationMsg()
   {
     float scale = .02;
     
@@ -696,7 +458,7 @@ private:
     return marker;
   }
   
-  visualization_msgs::Marker getVisualizationMsgNearest()
+  visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
   {
     float scale = .02;
     
@@ -731,7 +493,7 @@ private:
     return marker;
   }
   
-  void publishDepthScans()
+  void EgoCircleROS::publishDepthScans()
   {
     std::vector<float> depths = ego_circle_.getDepths();
     
@@ -751,7 +513,7 @@ private:
     inflated_scan_pub_.publish(scan);
   }
   
-  bool update(std_msgs::Header new_header)
+  bool EgoCircleROS::update(std_msgs::Header new_header)
   {
     bool success = true;
     
@@ -770,7 +532,7 @@ private:
   }
   
   
-  bool update(std_msgs::Header old_header, std_msgs::Header new_header)
+  bool EgoCircleROS::update(std_msgs::Header old_header, std_msgs::Header new_header)
   {
     try
     {
@@ -787,8 +549,6 @@ private:
     }
     return true;
   }
-  
-};
 
 
 std::vector<EgoCircularPoint> makePoints(int num)
@@ -812,6 +572,8 @@ std::vector<EgoCircularPoint> makePoints(int num)
   return points;
 }
 
+}
+
 int main(int argc, char **argv)
 {
   std::string name= "ego_circle_tester";
@@ -820,11 +582,11 @@ int main(int argc, char **argv)
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
   
-  EgoCircleROS circle_wrapper;
+  ego_circle::EgoCircleROS circle_wrapper;
   circle_wrapper.init();
   
-  EgoCircle& circle = circle_wrapper.ego_circle_;
+  ego_circle::EgoCircle& circle = circle_wrapper.ego_circle_;
   
-  //circle.insertPoints(makePoints(500),false);
+  //circle.insertPoints(ego_circle::makePoints(500),false);
   ros::spin();
 }
