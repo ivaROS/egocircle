@@ -124,7 +124,7 @@ struct EgoCircularCell
   {
     if(clearing)
     {
-      //removeCloserPoints(point);  //TODO: uncomment this when done testing
+      removeCloserPoints(point);  //TODO: uncomment this when done testing
     }
     //points_[point] = point;
     float key = discretize(point.getKey());
