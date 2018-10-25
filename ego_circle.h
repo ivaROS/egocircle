@@ -151,6 +151,7 @@ struct EgoCircle
     float angle = std::atan2(point.y,point.x);
     
     int ind = angle * scale_ + cells_.size() / 2;
+    ind = ind % cells_.size();
     return ind;
   }
   
