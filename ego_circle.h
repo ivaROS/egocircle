@@ -93,12 +93,13 @@ struct FloatCmp
 
 struct EgoCircularCell
 {
+  constexpr static float MAX_DEPTH = 50;  //TODO: Replace this with numeric_limits for type
   //std::vector<float> x,y;
-  std::map<float, EgoCircularPoint> points_;
-  typedef std::map<float, EgoCircularPoint>::iterator iterator;
+  std::vector<EgoCircularPoint> points_;
+  float current_min_ = 0;
   
-  void removeCloserPoints(EgoCircularPoint point);
-  
+  typedef std::vector<EgoCircularPoint>::iterator iterator;
+    
   void insertPoint(EgoCircularPoint point, bool clearing);
   
   void applyTransform(SE2Transform transform);
@@ -113,11 +114,14 @@ struct EgoCircularCell
     return points_.end();
   }
   
+  void reset();
+  
   void printPoints() const;
 };
 
 typedef pcl::PointXYZ PCLPoint;
 typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
+
 
 
 struct EgoCircle
@@ -156,6 +160,8 @@ struct EgoCircle
   
   void insertPoints(std::vector<EgoCircularPoint> points, bool clearing);
   
+  void insertPoints(EgoCircle& other);
+  
   void insertPoints(PCLPointCloud points);
   
   void updateCells();
@@ -174,7 +180,17 @@ struct EgoCircle
   
   void countPoints() const;
   
+  void reset();
+  
 };
+
+
+void swap(EgoCircle& lhs, EgoCircle& rhs)
+{
+  std::swap(lhs.cells_, rhs.cells_);
+  //Note: Currently, the rest of the fields are fixed, so no need to swap them
+}
+
 
 
 class EgoCircleIter
@@ -251,7 +267,7 @@ public:
     return clone;
   }
   
-  EgoCircularPoint & operator*() { return (*point_it_).second; }
+  EgoCircularPoint & operator*() { return (*point_it_); }
   
   bool operator!=(EgoCircleIter other)
   {
@@ -285,7 +301,7 @@ private:
   std::string base_frame_id_ = "base_footprint";
   
 public:
-  EgoCircle ego_circle_;
+  EgoCircle ego_circle_,old_ego_circle_;
   
 public:
   
@@ -302,7 +318,7 @@ private:
   
   visualization_msgs::Marker getVisualizationMsg();
   
-  visualization_msgs::Marker getVisualizationMsgNearest();
+  //visualization_msgs::Marker getVisualizationMsgNearest();
   
   void publishDepthScans();
   
@@ -310,6 +326,7 @@ private:
   
   bool update(std_msgs::Header old_header, std_msgs::Header new_header);
   
+  void prep();
 };
 
 

@@ -22,34 +22,46 @@
 
 namespace ego_circle
 {
-
-  void EgoCircularCell::removeCloserPoints(EgoCircularPoint point)
-  {
-    auto upper = points_.upper_bound(point.getKey());
-    points_.erase(points_.begin(),upper);
-  }
   
   void EgoCircularCell::insertPoint(EgoCircularPoint point, bool clearing)
   {
+    float key = point.getKey();
+    
     if(clearing)
     {
-      removeCloserPoints(point);  //TODO: uncomment this when done testing
+      if(points_.size() == 0)
+      {
+        points_.push_back(point);
+        current_min_ = key;
+      }
+      else if(key < current_min_)
+      {
+        current_min_ = key;
+        points_[0] = point;
+      }
     }
-    //points_[point] = point;
-    float key = discretize(point.getKey());
-    auto res = points_.insert(std::pair<float, EgoCircularPoint>(key,point));
-    if(!res.second)
+    else
     {
-      EgoCircularPoint existing = (*res.first).second;
-      ROS_DEBUG_STREAM("Did not insert (" << point.x << "," << point.y << "), already contains (" << existing.x << "," << existing.y << ")");
+      if(key > current_min_)
+      {
+        points_.push_back(point);
+      }
     }
+    
+    
+  }
+  
+  void EgoCircularCell::reset()
+  {
+    points_.clear();
+    current_min_ = 0;
   }
   
   void EgoCircularCell::applyTransform(SE2Transform transform)
   {
     for(auto& point : points_)
     {
-      ego_circle::applyTransform(point.second, transform);
+      ego_circle::applyTransform(point, transform);
     }
   }
   
@@ -57,7 +69,7 @@ namespace ego_circle
   {
     for(const auto& point : points_)
     {
-      EgoCircularPoint p = point.second;
+      EgoCircularPoint p = point;
       ROS_INFO_STREAM("\t\t[" << p.x << "," << p.y << "]");
     }
   }
@@ -77,7 +89,6 @@ namespace ego_circle
     cells[ind].insertPoint(point, clearing);
   }
   
-  //TODO: if clearing, should clear first, then add all the points, otherwise risk clearing new points too
   void EgoCircle::insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
   {
     for(auto point : points)
@@ -91,12 +102,20 @@ namespace ego_circle
     insertPoints(cells_, points, clearing);
   }
   
+  void EgoCircle::insertPoints(EgoCircle& other)
+  {
+    for(auto point : other)
+    {
+      insertPoint(cells_, point, false);
+    }
+  }
+  
   void EgoCircle::insertPoints(PCLPointCloud points)
   {
     for(auto point : points)
     {
       EgoCircularPoint ec_pnt(point.x, point.y);
-      insertPoint(cells_, ec_pnt, true); //should be true
+      insertPoint(cells_, ec_pnt, true);
     }
   }
   
@@ -110,7 +129,7 @@ namespace ego_circle
     {
       for(auto point : cell)
       {
-        insertPoint(cells, point.second, false);
+        insertPoint(cells, point, false);
         num_points++;
       }
     }
@@ -138,7 +157,7 @@ namespace ego_circle
     {
       cell.applyTransform(trans);
     }
-    updateCells();
+    //updateCells();
     
     ros::WallTime end = ros::WallTime::now();
     
@@ -155,25 +174,25 @@ namespace ego_circle
       float depth = max_depth_;
       if(cell.points_.size() > 0)
       {
-        depth = std::sqrt(cell.points_.begin()->first);
+        depth = std::sqrt(cell.current_min_);
       }
       depths[i] = depth;
     }
     return depths;
   }
   
-  std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
-  {
-    std::vector<EgoCircularPoint> points;
-    for(const auto& cell : cells_)
-    {
-      if(cell.points_.size() > 0)
-      {
-        points.push_back(cell.points_.begin()->second);
-      }
-    }
-    return points;
-  }
+//   std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
+//   {
+//     std::vector<EgoCircularPoint> points;
+//     for(const auto& cell : cells_)
+//     {
+//       if(cell.points_.size() > 0)
+//       {
+//         points.push_back(cell.points_.begin()->second);
+//       }
+//     }
+//     return points;
+//   }
   
   int EgoCircle::getN(float depth)
   {
@@ -262,6 +281,13 @@ EgoCircle::iterator EgoCircle::end()
   return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
 }
 
+void EgoCircle::reset()
+{
+  for(EgoCircularCell& cell : cells_)
+  {
+    cell.reset();
+  }
+}
 
 
 
@@ -332,7 +358,8 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     nh_(nh),
     pnh_(pnh),
     tf_listener_(tf_buffer_),
-    ego_circle_(512)
+    ego_circle_(512),
+    old_ego_circle_(512)
   {
     
   }
@@ -367,8 +394,8 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     visualization_msgs::Marker msg = getVisualizationMsg();
     vis_pub_.publish(msg);
     
-    msg = getVisualizationMsgNearest();
-    vis_pub_.publish(msg);
+//     msg = getVisualizationMsgNearest();
+//     vis_pub_.publish(msg);
     
   }
   
@@ -380,12 +407,20 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     update(header);
   }
   
+  void EgoCircleROS::prep()
+  {
+    swap(ego_circle_, old_ego_circle_);
+    ego_circle_.reset();
+    
+  }
+  
   void EgoCircleROS::pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
   {
+    prep();
+    
     std_msgs::Header header = pointcloud_msg->header;
     header.frame_id = base_frame_id_;
     
-    update(header);
     
     ros::WallTime starttime = ros::WallTime::now();
     
@@ -408,12 +443,17 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       //Is this necessary?
       pcl::removeNaNFromPointCloud(*cloud, *new_cloud, mapping);
       
+      
+      
       ego_circle_.insertPoints(*new_cloud);
     }
     catch (tf2::TransformException &ex) 
     {
       ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
     }
+    
+    update(header);
+    
   }
   
   visualization_msgs::Marker EgoCircleROS::getVisualizationMsg()
@@ -458,40 +498,40 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     return marker;
   }
   
-  visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
-  {
-    float scale = .02;
-    
-    visualization_msgs::Marker marker;
-    //marker.header.frame_id = odom_frame_id_;
-    //marker.header.stamp = old_header_.stamp;
-    marker.header = old_header_;
-    marker.type = visualization_msgs::Marker::POINTS;
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.ns = "nearest";
-    marker.color.a = .75;
-    marker.color.g = 1;
-    marker.color.r = 1;
-    marker.scale.x = scale;
-    marker.scale.y = scale;
-    marker.scale.z = scale;
-    
-    int num_cells = ego_circle_.cells_.size();
-    
-    std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
-    
-    for(const auto& point : points)
-    {
-      geometry_msgs::Point point_msg;
-      point_msg.x = point.x;
-      point_msg.y = point.y;
-      point_msg.z = 0;
-      
-      marker.points.push_back(point_msg);
-    }
-    
-    return marker;
-  }
+//   visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
+//   {
+//     float scale = .02;
+//     
+//     visualization_msgs::Marker marker;
+//     //marker.header.frame_id = odom_frame_id_;
+//     //marker.header.stamp = old_header_.stamp;
+//     marker.header = old_header_;
+//     marker.type = visualization_msgs::Marker::POINTS;
+//     marker.action = visualization_msgs::Marker::ADD;
+//     marker.ns = "nearest";
+//     marker.color.a = .75;
+//     marker.color.g = 1;
+//     marker.color.r = 1;
+//     marker.scale.x = scale;
+//     marker.scale.y = scale;
+//     marker.scale.z = scale;
+//     
+//     int num_cells = ego_circle_.cells_.size();
+//     
+//     std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
+//     
+//     for(const auto& point : points)
+//     {
+//       geometry_msgs::Point point_msg;
+//       point_msg.x = point.x;
+//       point_msg.y = point.y;
+//       point_msg.z = 0;
+//       
+//       marker.points.push_back(point_msg);
+//     }
+//     
+//     return marker;
+//   }
   
   void EgoCircleROS::publishDepthScans()
   {
@@ -540,7 +580,9 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       geometry_msgs::TransformStamped trans = tf_buffer_.lookupTransform(new_header.frame_id, new_header.stamp,
                                                                       old_header.frame_id, old_header.stamp,
                                                                       odom_frame_id_); 
-      ego_circle_.applyTransform(trans);      
+      old_ego_circle_.applyTransform(trans);
+      
+      ego_circle_.insertPoints(old_ego_circle_);
     }
     catch (tf2::TransformException &ex) 
     {
