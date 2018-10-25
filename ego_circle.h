@@ -96,7 +96,8 @@ struct EgoCircularCell
   constexpr static float MAX_DEPTH = 50;  //TODO: Replace this with numeric_limits for type
   //std::vector<float> x,y;
   std::vector<EgoCircularPoint> points_;
-  float current_min_ = 0;
+  float current_min_ = MAX_DEPTH;
+  bool cleared_ = false;
   
   typedef std::vector<EgoCircularPoint>::iterator iterator;
     

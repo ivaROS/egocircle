@@ -29,6 +29,7 @@ namespace ego_circle
     
     if(clearing)
     {
+      cleared_ = true;
       if(points_.size() == 0)
       {
         points_.push_back(point);
@@ -42,8 +43,19 @@ namespace ego_circle
     }
     else
     {
-      if(key > current_min_)
+      if(cleared_)
       {
+        if(key > current_min_)
+        {
+          points_.push_back(point);
+        }
+      }
+      else
+      {
+        if(key < current_min_)
+        {
+          current_min_ = key;
+        }
         points_.push_back(point);
       }
     }
@@ -54,7 +66,7 @@ namespace ego_circle
   void EgoCircularCell::reset()
   {
     points_.clear();
-    current_min_ = 0;
+    current_min_ = MAX_DEPTH;
   }
   
   void EgoCircularCell::applyTransform(SE2Transform transform)
@@ -416,14 +428,13 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   
   void EgoCircleROS::pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
   {
+    ros::WallTime starttime = ros::WallTime::now();
+    
     prep();
     
     std_msgs::Header header = pointcloud_msg->header;
     header.frame_id = base_frame_id_;
-    
-    
-    ros::WallTime starttime = ros::WallTime::now();
-    
+
     try 
     {
       geometry_msgs::TransformStamped transformStamped;
@@ -453,6 +464,9 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     }
     
     update(header);
+    
+    ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
+    
     
   }
   
