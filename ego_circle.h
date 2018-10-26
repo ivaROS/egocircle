@@ -71,8 +71,14 @@ struct SE2Transform
   }
 };
 
-void applyTransform(EgoCircularPoint& point, SE2Transform transform);
-
+void applyTransform(EgoCircularPoint& point, SE2Transform transform)
+{
+  float x = point.x;
+  float y = point.y;
+  
+  point.x = transform.r0 * x + transform.r1 * y + transform.t0;
+  point.y = transform.r3 * x + transform.r4 * y + transform.t1;
+}
 // Begin code copied from http://eliang.blogspot.com/2011/07/gotcha-of-c-map-and-set.html
 inline float discretize(float a)
 {
@@ -124,6 +130,42 @@ typedef pcl::PointXYZ PCLPoint;
 typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
 
 
+struct EgoCircleIndexer
+{
+  int size;
+  float scale;
+  
+  EgoCircleIndexer(int size):
+    size(size),
+    scale(size/(2*std::acos(-1)))
+  {}
+    
+  int getIndex(EgoCircularPoint point)
+  {
+    return ((int)(std::atan2(point.y,point.x) * scale + size / 2)) % size;
+  }
+};
+
+struct EgoCircleWidthConverter
+{
+  float scale;
+  
+//   EgoCircleWidthConverter(int size, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(size/(2*std::acos(-1)) *2  )  )   )   )
+//   {
+//   }
+  
+  EgoCircleWidthConverter(EgoCircleIndexer idx, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(idx.scale *2))))
+  {
+  }
+  
+  int getN(float depth)
+  {
+    int n = std::ceil(scale/depth);
+
+    return n;
+  }
+};
+
 
 struct EgoCircle
 {
@@ -131,15 +173,23 @@ struct EgoCircle
   
   float max_depth_ = 5;
   float inscribed_radius_ = .18;
+  EgoCircleIndexer indexer_;
+  EgoCircleWidthConverter converter_;
+  
   float scale_;
   
   friend class EgoCircleIter;
   typedef EgoCircleIter iterator;
   
   
-  EgoCircle(int size) :  scale_(size/(2*std::acos(-1)))
+  EgoCircle(int size) : 
+    indexer_(size),
+    converter_(size, inscribed_radius_)
   {
     cells_.resize(size);
+    
+    scale_ = size/(2*std::acos(-1));
+    
   }
   
   iterator begin();
@@ -148,11 +198,13 @@ struct EgoCircle
   //TODO: Do I need to perform rounding or is that part of casting?
   int getIndex(EgoCircularPoint point)
   {
-    float angle = std::atan2(point.y,point.x);
+//     float angle = std::atan2(point.y,point.x);
+//         
+//         int ind = angle * scale_ + cells_.size() / 2;
+//         ind = ind % cells_.size();
+//         return ind;
     
-    int ind = angle * scale_ + cells_.size() / 2;
-    ind = ind % cells_.size();
-    return ind;
+    return indexer_.getIndex(point);
   }
   
   void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing);

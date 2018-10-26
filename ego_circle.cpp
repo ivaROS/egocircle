@@ -85,15 +85,6 @@ namespace ego_circle
       ROS_INFO_STREAM("\t\t[" << p.x << "," << p.y << "]");
     }
   }
-
-  void applyTransform(EgoCircularPoint& point, SE2Transform transform)
-  {
-    float x = point.x;
-    float y = point.y;
-    
-    point.x = transform.r0 * x + transform.r1 * y + transform.t0;
-    point.y = transform.r3 * x + transform.r4 * y + transform.t1;
-  }
   
   void EgoCircle::insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing)
   {
@@ -208,12 +199,9 @@ namespace ego_circle
   
   int EgoCircle::getN(float depth)
   {
-    int n = std::ceil(inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2))));
-    if(n > 3)
-    {
-      int a = 3;
-    }
-    return n;
+    //int n = std::ceil(inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2))));
+    //return n;
+    return converter_.getN(depth);
   }
   
   std::vector<float> EgoCircle::inflateDepths(const std::vector<float>& depths)
@@ -402,13 +390,12 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   
   void EgoCircleROS::publishPoints()
   {
-    //TODO: publish a marker array composed of these markers
-    visualization_msgs::Marker msg = getVisualizationMsg();
-    vis_pub_.publish(msg);
-    
-//     msg = getVisualizationMsgNearest();
-//     vis_pub_.publish(msg);
-    
+    if(vis_pub_.getNumSubscribers()>0)
+    {
+      visualization_msgs::Marker msg = getVisualizationMsg();
+      vis_pub_.publish(msg);
+    }
+
   }
   
   void EgoCircleROS::odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
@@ -549,22 +536,34 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   
   void EgoCircleROS::publishDepthScans()
   {
-    std::vector<float> depths = ego_circle_.getDepths();
+    bool publish_scans = scan_pub_.getNumSubscribers()>0;
+    bool publish_inflated_scans = inflated_scan_pub_.getNumSubscribers()>0;
     
-    sensor_msgs::LaserScan scan;
-    scan.header = old_header_;
-    scan.angle_min= -std::acos(-1);
-    scan.angle_max= std::acos(-1);
-    scan.angle_increment = 1/ego_circle_.scale_;
-    scan.ranges = depths;
-    scan.range_min = 0;
-    scan.range_max = 20;
+    if(publish_scans || publish_inflated_scans)
+    {
+      std::vector<float> depths = ego_circle_.getDepths();
+      
+      sensor_msgs::LaserScan scan;
+      scan.header = old_header_;
+      scan.angle_min= -std::acos(-1);
+      scan.angle_max= std::acos(-1);
+      scan.angle_increment = 1/ego_circle_.indexer_.scale;
+      scan.ranges = depths;
+      scan.range_min = 0;
+      scan.range_max = 20;
 
-    scan_pub_.publish(scan);
-    
-    scan.ranges = ego_circle_.inflateDepths(depths);
-    
-    inflated_scan_pub_.publish(scan);
+      if(publish_scans)
+      {
+        scan_pub_.publish(scan);
+      }
+      
+      if(publish_inflated_scans)
+      {
+        scan.ranges = ego_circle_.inflateDepths(depths);
+      
+        inflated_scan_pub_.publish(scan);
+      }
+    }
   }
   
   bool EgoCircleROS::update(std_msgs::Header new_header)
