@@ -176,7 +176,6 @@ struct EgoCircle
   EgoCircleIndexer indexer_;
   EgoCircleWidthConverter converter_;
   
-  float scale_;
   
   friend class EgoCircleIter;
   typedef EgoCircleIter iterator;
@@ -184,12 +183,9 @@ struct EgoCircle
   
   EgoCircle(int size) : 
     indexer_(size),
-    converter_(size, inscribed_radius_)
+    converter_(indexer_, inscribed_radius_)
   {
     cells_.resize(size);
-    
-    scale_ = size/(2*std::acos(-1));
-    
   }
   
   iterator begin();
@@ -198,12 +194,6 @@ struct EgoCircle
   //TODO: Do I need to perform rounding or is that part of casting?
   int getIndex(EgoCircularPoint point)
   {
-//     float angle = std::atan2(point.y,point.x);
-//         
-//         int ind = angle * scale_ + cells_.size() / 2;
-//         ind = ind % cells_.size();
-//         return ind;
-    
     return indexer_.getIndex(point);
   }
   

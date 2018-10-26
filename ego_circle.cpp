@@ -199,8 +199,6 @@ namespace ego_circle
   
   int EgoCircle::getN(float depth)
   {
-    //int n = std::ceil(inscribed_radius_ / (depth * 2 * std::sin(1/(scale_*2))));
-    //return n;
     return converter_.getN(depth);
   }
   
