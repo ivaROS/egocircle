@@ -51,6 +51,10 @@ struct SE2Transform
 {
   float r0,r1,r3,r4,t0,t1;
   
+  SE2Transform()
+  {
+  }
+  
   SE2Transform(geometry_msgs::TransformStamped trans)
   {
     tf::Quaternion rotationQuaternion = tf::Quaternion(trans.transform.rotation.x,
@@ -134,6 +138,8 @@ struct EgoCircleIndexer
 {
   int size;
   float scale;
+  
+  EgoCircleIndexer() {}
   
   EgoCircleIndexer(int size):
     size(size),
