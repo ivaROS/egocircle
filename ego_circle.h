@@ -103,10 +103,12 @@ struct FloatCmp
 
 struct EgoCircularCell
 {
-  constexpr static float MAX_DEPTH = 50;  //TODO: Replace this with numeric_limits for type
+  constexpr static float MAX_DEPTH = 5;
+  constexpr static float MAX_DEPTH_SQ = MAX_DEPTH*MAX_DEPTH;
+  
   //std::vector<float> x,y;
   std::vector<EgoCircularPoint> points_;
-  float current_min_ = MAX_DEPTH;
+  float current_min_ = MAX_DEPTH_SQ;
   bool cleared_ = false;
   
   typedef std::vector<EgoCircularPoint>::iterator iterator;
@@ -146,6 +148,7 @@ struct EgoCircleIndexer
     scale(size/(2*std::acos(-1)))
   {}
     
+  //NOTE: All that matters is that cells are evenly mapped to a circle, so no rounding is necessary here
   int getIndex(EgoCircularPoint point)
   {
     return ((int)(std::atan2(point.y,point.x) * scale + size / 2)) % size;
@@ -177,7 +180,7 @@ struct EgoCircle
 {
   std::vector<EgoCircularCell> cells_;
   
-  float max_depth_ = 5;
+  constexpr static float max_depth_ = EgoCircularCell::MAX_DEPTH;
   float inscribed_radius_ = .18;
   EgoCircleIndexer indexer_;
   EgoCircleWidthConverter converter_;

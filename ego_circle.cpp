@@ -56,7 +56,10 @@ namespace ego_circle
         {
           current_min_ = key;
         }
-        points_.push_back(point);
+        if(key < MAX_DEPTH_SQ)
+        {
+          points_.push_back(point);
+        }
       }
     }
     
@@ -66,7 +69,7 @@ namespace ego_circle
   void EgoCircularCell::reset()
   {
     points_.clear();
-    current_min_ = MAX_DEPTH;
+    current_min_ = MAX_DEPTH_SQ;
     cleared_ = false;
   }
   
@@ -549,7 +552,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       scan.angle_increment = 1/ego_circle_.indexer_.scale;
       scan.ranges = depths;
       scan.range_min = 0;
-      scan.range_max = 20;
+      scan.range_max = ego_circle_.max_depth_ + 1;
 
       if(publish_scans)
       {
