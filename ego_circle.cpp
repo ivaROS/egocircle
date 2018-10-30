@@ -67,6 +67,7 @@ namespace ego_circle
   {
     points_.clear();
     current_min_ = MAX_DEPTH;
+    cleared_ = false;
   }
   
   void EgoCircularCell::applyTransform(SE2Transform transform)
