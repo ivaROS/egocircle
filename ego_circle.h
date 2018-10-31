@@ -75,6 +75,7 @@ struct SE2Transform
   }
 };
 
+inline
 void applyTransform(EgoCircularPoint& point, SE2Transform transform)
 {
   float x = point.x;
@@ -83,6 +84,7 @@ void applyTransform(EgoCircularPoint& point, SE2Transform transform)
   point.x = transform.r0 * x + transform.r1 * y + transform.t0;
   point.y = transform.r3 * x + transform.r4 * y + transform.t1;
 }
+
 // Begin code copied from http://eliang.blogspot.com/2011/07/gotcha-of-c-map-and-set.html
 inline float discretize(float a)
 {
@@ -149,7 +151,7 @@ struct EgoCircleIndexer
   {}
     
   //NOTE: All that matters is that cells are evenly mapped to a circle, so no rounding is necessary here
-  int getIndex(EgoCircularPoint point)
+  int getIndex(EgoCircularPoint point) const
   {
     return ((int)(std::atan2(point.y,point.x) * scale + size / 2)) % size;
   }
@@ -167,7 +169,7 @@ struct EgoCircleWidthConverter
   {
   }
   
-  int getN(float depth)
+  int getN(float depth) const
   {
     int n = std::ceil(scale/depth);
 
@@ -237,7 +239,7 @@ struct EgoCircle
   
 };
 
-
+inline
 void swap(EgoCircle& lhs, EgoCircle& rhs)
 {
   std::swap(lhs.cells_, rhs.cells_);
