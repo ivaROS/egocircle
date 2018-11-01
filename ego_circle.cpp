@@ -119,11 +119,21 @@ namespace ego_circle
   
   void EgoCircle::insertPoints(PCLPointCloud points)
   {
-    for(auto point : points)
+    int num_pnts = points.size();
+
+    for(int i = 0; i < num_pnts; ++i)
     {
+      auto point = points[i];
       EgoCircularPoint ec_pnt(point.x, point.y);
-      insertPoint(cells_, ec_pnt, true);
+      
+      bool clearing = !( (i==0) || (i == num_pnts-1) );
+      insertPoint(cells_, ec_pnt, clearing);
     }
+//     for(auto point : points)
+//     {
+//       EgoCircularPoint ec_pnt(point.x, point.y);
+//       insertPoint(cells_, ec_pnt, true);
+//     }
   }
   
   void EgoCircle::updateCells()

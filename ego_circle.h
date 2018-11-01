@@ -46,6 +46,14 @@ struct EgoCircularPoint
   
 };
 
+inline
+float distance_sq(const EgoCircularPoint& p1, const EgoCircularPoint& p2)
+{
+  float xd = p1.x-p2.x;
+  float yd = p1.y-p2.y;
+  float d = xd*xd + yd*yd;
+  return d;
+}
 
 struct SE2Transform
 {
@@ -112,6 +120,7 @@ struct EgoCircularCell
   std::vector<EgoCircularPoint> points_;
   float current_min_ = MAX_DEPTH_SQ;
   bool cleared_ = false;
+  //bool border_ = false;
   
   typedef std::vector<EgoCircularPoint>::iterator iterator;
     
