@@ -120,7 +120,7 @@ struct EgoCircularCell
   std::vector<EgoCircularPoint> points_;
   float current_min_ = MAX_DEPTH_SQ;
   bool cleared_ = false;
-  //bool border_ = false;
+  bool border_ = false;
   
   typedef std::vector<EgoCircularPoint>::iterator iterator;
     
@@ -160,9 +160,14 @@ struct EgoCircleIndexer
   {}
     
   //NOTE: All that matters is that cells are evenly mapped to a circle, so no rounding is necessary here
+  int getIndex(float angle) const
+  {
+    return ((int)(angle * scale + size / 2)) % size;
+  }
+  
   int getIndex(EgoCircularPoint point) const
   {
-    return ((int)(std::atan2(point.y,point.x) * scale + size / 2)) % size;
+    return getIndex(std::atan2(point.y,point.x));
   }
 };
 
@@ -211,8 +216,8 @@ struct EgoCircle
   iterator begin();
   iterator end();
   
-  //TODO: Do I need to perform rounding or is that part of casting?
-  int getIndex(EgoCircularPoint point)
+  template <typename T>
+  int getIndex(T point)
   {
     return indexer_.getIndex(point);
   }
@@ -227,6 +232,8 @@ struct EgoCircle
   void insertPoints(EgoCircle& other);
   
   void insertPoints(PCLPointCloud points);
+  
+  void insertPoints(const sensor_msgs::LaserScan& scan);
   
   void updateCells();
 
@@ -340,6 +347,121 @@ public:
   
 };
 
+
+
+struct PolarPoint
+{
+  float r, theta;
+  
+  PolarPoint() :
+  r(0),
+  theta(0)
+  {}
+  
+  PolarPoint(float r, float theta) :
+  r(r),
+  theta(theta)
+  {}
+  
+  PolarPoint(const EgoCircularPoint& pnt) :
+  r(std::sqrt(pnt.x*pnt.x + pnt.y*pnt.y)),
+  theta(std::atan2(pnt.y,pnt.x))
+  {}
+  
+  operator EgoCircularPoint()
+  {
+    float x = std::cos(theta)*r;
+    float y = std::sin(theta)*r;
+    EgoCircularPoint point(x,y);
+    return point;
+  }
+};
+
+class LaserScanIter;
+
+class LaserScanWrapper
+{
+  friend LaserScanIter;
+  
+  const sensor_msgs::LaserScan& scan_;
+  
+  
+public:
+  LaserScanWrapper(const sensor_msgs::LaserScan& scan) :
+    scan_(scan)
+  {
+  }
+  
+  LaserScanIter begin();
+  
+  LaserScanIter end();
+  
+};
+
+
+
+class LaserScanIter
+{
+private:
+  float current_angle_;
+  const float angle_inc_;
+  
+  typedef decltype(sensor_msgs::LaserScan::ranges)::const_iterator Iterator;
+  Iterator it_;
+  
+public:
+  
+  LaserScanIter(Iterator it, float start_angle, float angle_inc) :
+    current_angle_(start_angle),
+    angle_inc_(angle_inc),
+    it_(it)
+  {}
+    
+  LaserScanIter & operator++() 
+  {
+    ++it_;
+    current_angle_+=angle_inc_;
+    
+    return *this; 
+  }
+  
+  LaserScanIter operator++(int)
+  {
+    LaserScanIter clone(*this);
+    
+    ++it_;
+    current_angle_+=angle_inc_;
+
+    return clone;
+  }
+  
+  PolarPoint operator*() 
+  {
+    //float r = *it_;
+    
+    PolarPoint pnt(*it_, current_angle_);
+    return pnt;
+  }
+  
+  bool operator!=(LaserScanIter other)
+  {
+    return it_ != other.it_;// || current_angle_ != other.current_angle_;
+  }
+  
+};
+
+inline
+LaserScanIter LaserScanWrapper::begin()
+{
+  return LaserScanIter(scan_.ranges.begin(),scan_.angle_min,scan_.angle_increment);
+}
+
+inline
+LaserScanIter LaserScanWrapper::end()
+{
+  return LaserScanIter(scan_.ranges.end(),scan_.angle_max,scan_.angle_increment);
+}
+
 std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf);
 
 class EgoCircleROS
@@ -347,7 +469,9 @@ class EgoCircleROS
   
 
   
-  typedef tf2_ros::MessageFilter<sensor_msgs::PointCloud2> TF_Filter;
+  typedef tf2_ros::MessageFilter<sensor_msgs::PointCloud2> PC_TF_Filter;
+  typedef tf2_ros::MessageFilter<sensor_msgs::LaserScan> LS_TF_Filter;
+  
 private:
   ros::NodeHandle nh_, pnh_;
   tf2_ros::Buffer tf_buffer_;
@@ -355,8 +479,11 @@ private:
   
   message_filters::Subscriber<nav_msgs::Odometry> odom_subscriber_;
   message_filters::Subscriber<sensor_msgs::PointCloud2> pc_subscriber_;
+  message_filters::Subscriber<sensor_msgs::LaserScan> ls_subscriber_;
   
-  std::shared_ptr<TF_Filter> tf_filter_;
+  std::shared_ptr<PC_TF_Filter> pc_tf_filter_;
+  std::shared_ptr<LS_TF_Filter> ls_tf_filter_;
+  
   ros::Publisher vis_pub_, scan_pub_, inflated_scan_pub_;
   
   std_msgs::Header old_header_;
@@ -379,6 +506,8 @@ private:
   void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg);
   
   void pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg);
+  
+  void laserscanCB(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
   
   visualization_msgs::Marker getVisualizationMsg();
   

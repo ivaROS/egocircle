@@ -27,7 +27,7 @@ namespace ego_circle
   {
     float key = point.getKey();
     
-    if(clearing)
+    if(clearing && !border_)
     {
       cleared_ = true;
       if(points_.size() == 0)
@@ -117,23 +117,32 @@ namespace ego_circle
     }
   }
   
+  void EgoCircle::insertPoints(const sensor_msgs::LaserScan& scan)
+  {
+    int start_ind = getIndex(scan.angle_min);
+    int end_ind = getIndex(scan.angle_max);
+    
+    cells_[start_ind].border_ = true;
+    cells_[end_ind].border_ = true;
+    
+    LaserScanWrapper it_scan(scan);
+    
+    for(auto pnt : it_scan)
+    {
+      if(pnt.r==pnt.r)
+      {
+        insertPoint(cells_, pnt, true);
+      }
+    }
+  }
+  
   void EgoCircle::insertPoints(PCLPointCloud points)
   {
-    int num_pnts = points.size();
-
-    for(int i = 0; i < num_pnts; ++i)
+    for(auto point : points)
     {
-      auto point = points[i];
       EgoCircularPoint ec_pnt(point.x, point.y);
-      
-      bool clearing = !( (i==0) || (i == num_pnts-1) );
-      insertPoint(cells_, ec_pnt, clearing);
+      insertPoint(cells_, ec_pnt, true);
     }
-//     for(auto point : points)
-//     {
-//       EgoCircularPoint ec_pnt(point.x, point.y);
-//       insertPoint(cells_, ec_pnt, true);
-//     }
   }
   
   void EgoCircle::updateCells()
@@ -381,18 +390,25 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
     std::string pointcloud_topic = "/converted_pc";
+    std::string laserscan_topic = "scan";
     
-    
-    tf_filter_ = std::make_shared<TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
-    tf_filter_->registerCallback(boost::bind(&EgoCircleROS::pointcloudCB, this, _1));
+    pc_tf_filter_ = std::make_shared<PC_TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
+    pc_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::pointcloudCB, this, _1));
     
     //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
     //tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
-    tf_filter_->setTolerance(ros::Duration(0.01));
+    pc_tf_filter_->setTolerance(ros::Duration(0.01));
     
     ego_circle_ = EgoCircle(512);
     
-    pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
+    
+    ls_tf_filter_ = std::make_shared<LS_TF_Filter>(ls_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
+    ls_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::laserscanCB, this, _1));
+    ls_tf_filter_->setTolerance(ros::Duration(0.01));
+    
+    ls_subscriber_.subscribe(nh_, laserscan_topic, 5);
+    
+    //pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
@@ -467,6 +483,49 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
     
     
+  }
+  
+  
+  void EgoCircleROS::laserscanCB(const sensor_msgs::LaserScan::ConstPtr& scan)
+  {
+    if(scan)
+    {
+      ros::WallTime starttime = ros::WallTime::now();
+      
+      prep();
+      
+      std_msgs::Header header = scan->header;
+      header.frame_id = base_frame_id_;
+      
+//       try 
+//       {
+//         geometry_msgs::TransformStamped transformStamped;
+//         transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, scan->header.frame_id, header.stamp,
+//                                                       odom_frame_id_); 
+//         
+//         sensor_msgs::LaserScan transformed_scan;
+//         
+//         tf2::doTransform(*scan, transformed_scan, transformStamped);
+//         
+//         ego_circle_.insertPoints(transformed_scan);
+//       }
+//       catch (tf2::TransformException &ex) 
+//       {
+//         ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
+//       }
+      
+      //TODO: make sure to either transform points properly before inserting or use this frame as the base_frame_id
+      ego_circle_.insertPoints(*scan);
+      
+      update(header);
+      
+      ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
+
+    }
+    else
+    {
+      ROS_WARN("Attempting to insert points from empty LaserScan message!");
+    }
   }
   
   visualization_msgs::Marker EgoCircleROS::getVisualizationMsg()
