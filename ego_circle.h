@@ -46,6 +46,35 @@ struct EgoCircularPoint
   
 };
 
+
+struct PolarPoint
+{
+  float r, theta;
+  
+  PolarPoint() :
+    r(0),
+    theta(0)
+  {}
+  
+  PolarPoint(float r, float theta) :
+    r(r),
+    theta(theta)
+  {}
+  
+  PolarPoint(const EgoCircularPoint& pnt) :
+    r(std::sqrt(pnt.x*pnt.x + pnt.y*pnt.y)),
+    theta(std::atan2(pnt.y,pnt.x))
+  {}
+  
+  operator EgoCircularPoint()
+  {
+    float x = std::cos(theta)*r;
+    float y = std::sin(theta)*r;
+    EgoCircularPoint point(x,y);
+    return point;
+  }
+};
+
 inline
 float distance_sq(const EgoCircularPoint& p1, const EgoCircularPoint& p2)
 {
@@ -165,6 +194,11 @@ struct EgoCircleIndexer
     return ((int)(angle * scale + size / 2)) % size;
   }
   
+  int getIndex(PolarPoint point) const
+  {
+    return getIndex(point.theta);
+  }
+  
   int getIndex(EgoCircularPoint point) const
   {
     return getIndex(std::atan2(point.y,point.x));
@@ -222,7 +256,12 @@ struct EgoCircle
     return indexer_.getIndex(point);
   }
   
-  void insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing);
+  template <typename T>
+  void insertPoint(std::vector<EgoCircularCell>& cells, T point, bool clearing)
+  {
+    int ind = getIndex(point);
+    cells[ind].insertPoint(point, clearing);
+  }
   
   //TODO: if clearing, should clear first, then add all the points, otherwise risk clearing new points too
   void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing);
@@ -349,33 +388,6 @@ public:
 
 
 
-struct PolarPoint
-{
-  float r, theta;
-  
-  PolarPoint() :
-  r(0),
-  theta(0)
-  {}
-  
-  PolarPoint(float r, float theta) :
-  r(r),
-  theta(theta)
-  {}
-  
-  PolarPoint(const EgoCircularPoint& pnt) :
-  r(std::sqrt(pnt.x*pnt.x + pnt.y*pnt.y)),
-  theta(std::atan2(pnt.y,pnt.x))
-  {}
-  
-  operator EgoCircularPoint()
-  {
-    float x = std::cos(theta)*r;
-    float y = std::sin(theta)*r;
-    EgoCircularPoint point(x,y);
-    return point;
-  }
-};
 
 class LaserScanIter;
 

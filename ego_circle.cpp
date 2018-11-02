@@ -90,12 +90,6 @@ namespace ego_circle
     }
   }
   
-  void EgoCircle::insertPoint(std::vector<EgoCircularCell>& cells, EgoCircularPoint point, bool clearing)
-  {
-    int ind = getIndex(point);
-    cells[ind].insertPoint(point, clearing);
-  }
-  
   void EgoCircle::insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing)
   {
     for(auto point : points)
@@ -495,7 +489,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       prep();
       
       std_msgs::Header header = scan->header;
-      header.frame_id = base_frame_id_;
+      //header.frame_id = base_frame_id_;
       
 //       try 
 //       {
