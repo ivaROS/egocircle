@@ -213,6 +213,8 @@ struct EgoCircleWidthConverter
 //   {
 //   }
   
+  EgoCircleWidthConverter() {}
+  
   EgoCircleWidthConverter(EgoCircleIndexer idx, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(idx.scale *2))))
   {
   }
