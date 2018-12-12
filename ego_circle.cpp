@@ -125,7 +125,7 @@ namespace ego_circle
     {
       if(pnt.r==pnt.r)
       {
-        insertPoint(cells_, pnt, true);
+        insertPoint(cells_, pnt, clearing_enabled_);
       }
     }
   }
@@ -135,7 +135,7 @@ namespace ego_circle
     for(auto point : points)
     {
       EgoCircularPoint ec_pnt(point.x, point.y);
-      insertPoint(cells_, ec_pnt, true);
+      insertPoint(cells_, ec_pnt, clearing_enabled_);
     }
   }
   
@@ -383,7 +383,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   {
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
-    std::string pointcloud_topic = "/converted_pc";
+    std::string pointcloud_topic = "pointcloud";
     std::string laserscan_topic = "scan";
     
     pc_tf_filter_ = std::make_shared<PC_TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
@@ -394,6 +394,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     pc_tf_filter_->setTolerance(ros::Duration(0.01));
     
     ego_circle_ = EgoCircle(512);
+    ego_circle_.clearing_enabled_ = false;
     
     
     ls_tf_filter_ = std::make_shared<LS_TF_Filter>(ls_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
@@ -402,7 +403,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     
     ls_subscriber_.subscribe(nh_, laserscan_topic, 5);
     
-    //pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
+    pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);

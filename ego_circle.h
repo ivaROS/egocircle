@@ -241,6 +241,7 @@ struct EgoCircle
   friend class EgoCircleIter;
   typedef EgoCircleIter iterator;
   
+  bool clearing_enabled_;
   
   EgoCircle(int size) : 
     indexer_(size),
