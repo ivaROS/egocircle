@@ -142,7 +142,7 @@ struct FloatCmp
 
 struct EgoCircularCell
 {
-  constexpr static float MAX_DEPTH = 5;
+  constexpr static float MAX_DEPTH = 3;
   constexpr static float MAX_DEPTH_SQ = MAX_DEPTH*MAX_DEPTH;
   
   //std::vector<float> x,y;
