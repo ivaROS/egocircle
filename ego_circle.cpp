@@ -394,7 +394,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     pc_tf_filter_->setTolerance(ros::Duration(0.01));
     
     ego_circle_ = EgoCircle(512);
-    ego_circle_.clearing_enabled_ = false;
+    ego_circle_.clearing_enabled_ = true;
     
     
     ls_tf_filter_ = std::make_shared<LS_TF_Filter>(ls_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
