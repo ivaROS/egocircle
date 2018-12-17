@@ -616,7 +616,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       scan.angle_increment = 1/ego_circle_.indexer_.scale;
       scan.ranges = depths;
       scan.range_min = 0;
-      scan.range_max = ego_circle_.max_depth_ + 1;
+      scan.range_max = ego_circle_.max_depth_ + 1;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
 
       if(publish_scans)
       {
@@ -641,9 +641,10 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       success = update(old_header_, new_header);
     }
     
+    old_header_ = new_header;
+    
     if(success)
     {
-      old_header_ = new_header;
       publishPoints();
       publishDepthScans();
     }
