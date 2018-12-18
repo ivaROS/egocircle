@@ -508,6 +508,7 @@ private:
   
 public:
   EgoCircle ego_circle_,old_ego_circle_;
+  static constexpr float OFFSET=1;
   
 public:
   
