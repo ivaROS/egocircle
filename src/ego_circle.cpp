@@ -1,5 +1,5 @@
 
-#include <pips_dwa_controller/ego_circle.h>
+#include <egocircle/ego_circle.h>
 #include <map>
 #include <vector>
 #include <cmath>
