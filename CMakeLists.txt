@@ -29,7 +29,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES ego_circle
+  #LIBRARIES ego_circle
   CATKIN_DEPENDS geometry_msgs nav_msgs pcl_ros pcl_conversions sensor_msgs tf2_ros tf2_sensor_msgs visualization_msgs
 )
 
