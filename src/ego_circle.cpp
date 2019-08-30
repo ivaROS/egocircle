@@ -29,17 +29,24 @@ namespace ego_circle
     
     if(clearing && !border_)
     {
+      if(key >= MAX_DEPTH_SQ)
+      {
+        reset();
+      }
+      else
+      {
+        if(points_.size() == 0)
+        {
+          points_.push_back(point);
+          current_min_ = key;
+        }
+        else if(key < current_min_)
+        {
+          current_min_ = key;
+          points_[0] = point;
+        }
+      }
       cleared_ = true;
-      if(points_.size() == 0)
-      {
-        points_.push_back(point);
-        current_min_ = key;
-      }
-      else if(key < current_min_)
-      {
-        current_min_ = key;
-        points_[0] = point;
-      }
     }
     else
     {
@@ -155,19 +162,19 @@ namespace ego_circle
     }
     
     //NOTE: This should work, but requires properly fully declaring the iterator class beforehand
-//     for(auto point : *this)
-//     {
-//       insertPoint(cells, point);
-//       num_points++;
-//     }
-
+    //     for(auto point : *this)
+    //     {
+    //       insertPoint(cells, point);
+    //       num_points++;
+    //     }
+    
     
     ROS_DEBUG_STREAM("Updated " << num_points << " points");
     
     cells_ = cells; //TODO: hold onto current and previous cell vectors; clear each cell after copying points from it, and std::swap vectors here
     
   }
-
+  
   void EgoCircle::applyTransform(geometry_msgs::TransformStamped transform)
   {
     ros::WallTime start = ros::WallTime::now();
@@ -201,18 +208,18 @@ namespace ego_circle
     return depths;
   }
   
-//   std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
-//   {
-//     std::vector<EgoCircularPoint> points;
-//     for(const auto& cell : cells_)
-//     {
-//       if(cell.points_.size() > 0)
-//       {
-//         points.push_back(cell.points_.begin()->second);
-//       }
-//     }
-//     return points;
-//   }
+  //   std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
+  //   {
+  //     std::vector<EgoCircularPoint> points;
+  //     for(const auto& cell : cells_)
+  //     {
+  //       if(cell.points_.size() > 0)
+  //       {
+  //         points.push_back(cell.points_.begin()->second);
+  //       }
+  //     }
+  //     return points;
+  //   }
   
   int EgoCircle::getN(float depth)
   {
@@ -240,11 +247,11 @@ namespace ego_circle
         inflated_depths[ind] = std::min(depths[i] -inscribed_radius_,inflated_depths[ind]);
       }
       
-//       for(int j = i+1; j <= i + n; j++)
-//       {
-//         int ind = (j < depths.size()) ? j : j - depths.size();
-//         inflated_depths[ind] = std::min(depths[ind]-inscribed_radius_,depths[i]-inscribed_radius_);
-//       }
+      //       for(int j = i+1; j <= i + n; j++)
+      //       {
+      //         int ind = (j < depths.size()) ? j : j - depths.size();
+      //         inflated_depths[ind] = std::min(depths[ind]-inscribed_radius_,depths[i]-inscribed_radius_);
+      //       }
     }
     
     return inflated_depths;
@@ -277,104 +284,104 @@ namespace ego_circle
     
   }
   
-
-
-EgoCircle::iterator EgoCircle::begin()
-{
-  for(int i = 0; i < cells_.size(); i++)
+  
+  
+  EgoCircle::iterator EgoCircle::begin()
   {
-    if(cells_[i].points_.size() > 0)
+    for(int i = 0; i < cells_.size(); i++)
     {
-      return EgoCircle::iterator(*this,i,cells_[i].points_.begin());
+      if(cells_[i].points_.size() > 0)
+      {
+        return EgoCircle::iterator(*this,i,cells_[i].points_.begin());
+      }
+    }
+    return end();
+  }
+  
+  EgoCircle::iterator EgoCircle::end()
+  {
+    return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
+  }
+  
+  void EgoCircle::reset()
+  {
+    for(EgoCircularCell& cell : cells_)
+    {
+      cell.reset();
     }
   }
-  return end();
-}
-
-EgoCircle::iterator EgoCircle::end()
-{
-  return EgoCircle::iterator(*this,cells_.size()-1,cells_.back().points_.end());
-}
-
-void EgoCircle::reset()
-{
-  for(EgoCircularCell& cell : cells_)
+  
+  
+  
+  std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   {
-    cell.reset();
+    
+    confidence = std::min(confidence, max_conf);
+    
+    //https://stackoverflow.com/questions/12875486/what-is-the-algorithm-to-create-colors-for-a-heatmap
+    float fH = (1.0 - (confidence / max_conf)) * 240;
+    float fS = 1.0;
+    float fV = .5;
+    
+    //https://gist.github.com/fairlight1337/4935ae72bcbcc1ba5c72
+    float fC = fV * fS; // Chroma
+    float fHPrime = fmod(fH / 60.0, 6);
+    float fX = fC * (1 - fabs(fmod(fHPrime, 2) - 1));
+    float fM = fV - fC;
+    
+    float fB, fR, fG;
+    
+    if(0 <= fHPrime && fHPrime < 1) {
+      fR = fC;
+      fG = fX;
+      fB = 0;
+    } else if(1 <= fHPrime && fHPrime < 2) {
+      fR = fX;
+      fG = fC;
+      fB = 0;
+    } else if(2 <= fHPrime && fHPrime < 3) {
+      fR = 0;
+      fG = fC;
+      fB = fX;
+    } else if(3 <= fHPrime && fHPrime < 4) {
+      fR = 0;
+      fG = fX;
+      fB = fC;
+    } else if(4 <= fHPrime && fHPrime < 5) {
+      fR = fX;
+      fG = 0;
+      fB = fC;
+    } else if(5 <= fHPrime && fHPrime < 6) {
+      fR = fC;
+      fG = 0;
+      fB = fX;
+    } else {
+      fR = 0;
+      fG = 0;
+      fB = 0;
+    }
+    
+    fR += fM;
+    fG += fM;
+    fB += fM;
+    
+    std_msgs::ColorRGBA color;
+    color.a = 1.0;
+    color.r = fR;
+    color.b = fB;
+    color.g = fG;
+    
+    return color;
   }
-}
-
-
-
-std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
-{
   
-  confidence = std::min(confidence, max_conf);
   
-  //https://stackoverflow.com/questions/12875486/what-is-the-algorithm-to-create-colors-for-a-heatmap
-  float fH = (1.0 - (confidence / max_conf)) * 240;
-  float fS = 1.0;
-  float fV = .5;
   
-  //https://gist.github.com/fairlight1337/4935ae72bcbcc1ba5c72
-  float fC = fV * fS; // Chroma
-  float fHPrime = fmod(fH / 60.0, 6);
-  float fX = fC * (1 - fabs(fmod(fHPrime, 2) - 1));
-  float fM = fV - fC;
-  
-  float fB, fR, fG;
-  
-  if(0 <= fHPrime && fHPrime < 1) {
-    fR = fC;
-    fG = fX;
-    fB = 0;
-  } else if(1 <= fHPrime && fHPrime < 2) {
-    fR = fX;
-    fG = fC;
-    fB = 0;
-  } else if(2 <= fHPrime && fHPrime < 3) {
-    fR = 0;
-    fG = fC;
-    fB = fX;
-  } else if(3 <= fHPrime && fHPrime < 4) {
-    fR = 0;
-    fG = fX;
-    fB = fC;
-  } else if(4 <= fHPrime && fHPrime < 5) {
-    fR = fX;
-    fG = 0;
-    fB = fC;
-  } else if(5 <= fHPrime && fHPrime < 6) {
-    fR = fC;
-    fG = 0;
-    fB = fX;
-  } else {
-    fR = 0;
-    fG = 0;
-    fB = 0;
-  }
-  
-  fR += fM;
-  fG += fM;
-  fB += fM;
-  
-  std_msgs::ColorRGBA color;
-  color.a = 1.0;
-  color.r = fR;
-  color.b = fB;
-  color.g = fG;
-  
-  return color;
-}
-
-
-
   EgoCircleROS::EgoCircleROS(ros::NodeHandle nh, ros::NodeHandle pnh):
-    nh_(nh),
-    pnh_(pnh),
-    tf_listener_(tf_buffer_),
-    ego_circle_(512),
-    old_ego_circle_(512)
+  nh_(nh),
+  pnh_(pnh),
+  tf_listener_(tf_buffer_),
+  ego_circle_(512),
+  old_ego_circle_(512)
   {
     
   }
@@ -418,7 +425,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       visualization_msgs::Marker msg = getVisualizationMsg();
       vis_pub_.publish(msg);
     }
-
+    
   }
   
   void EgoCircleROS::odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg)
@@ -444,13 +451,13 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     
     std_msgs::Header header = pointcloud_msg->header;
     header.frame_id = base_frame_id_;
-
+    
     try 
     {
       geometry_msgs::TransformStamped transformStamped;
       transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, pointcloud_msg->header.frame_id, header.stamp,
-                                                  odom_frame_id_); 
-    
+                                                    odom_frame_id_); 
+      
       sensor_msgs::PointCloud2 transformed_cloud;
       
       tf2::doTransform(*pointcloud_msg, transformed_cloud, transformStamped);
@@ -492,22 +499,22 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       std_msgs::Header header = scan->header;
       //header.frame_id = base_frame_id_;
       
-//       try 
-//       {
-//         geometry_msgs::TransformStamped transformStamped;
-//         transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, scan->header.frame_id, header.stamp,
-//                                                       odom_frame_id_); 
-//         
-//         sensor_msgs::LaserScan transformed_scan;
-//         
-//         tf2::doTransform(*scan, transformed_scan, transformStamped);
-//         
-//         ego_circle_.insertPoints(transformed_scan);
-//       }
-//       catch (tf2::TransformException &ex) 
-//       {
-//         ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
-//       }
+      //       try 
+      //       {
+      //         geometry_msgs::TransformStamped transformStamped;
+      //         transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, scan->header.frame_id, header.stamp,
+      //                                                       odom_frame_id_); 
+      //         
+      //         sensor_msgs::LaserScan transformed_scan;
+      //         
+      //         tf2::doTransform(*scan, transformed_scan, transformStamped);
+      //         
+      //         ego_circle_.insertPoints(transformed_scan);
+      //       }
+      //       catch (tf2::TransformException &ex) 
+      //       {
+      //         ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
+      //       }
       
       //TODO: make sure to either transform points properly before inserting or use this frame as the base_frame_id
       ego_circle_.insertPoints(*scan);
@@ -515,7 +522,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       update(header);
       
       ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
-
+      
     }
     else
     {
@@ -534,9 +541,9 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     marker.type = visualization_msgs::Marker::POINTS;
     marker.action = visualization_msgs::Marker::ADD;
     marker.ns = "all";
-//     marker.color.a = .75;
-//     marker.color.g = 1;
-//     marker.color.r = 1;
+    //     marker.color.a = .75;
+    //     marker.color.g = 1;
+    //     marker.color.r = 1;
     marker.scale.x = scale;
     marker.scale.y = scale;
     marker.scale.z = scale;
@@ -565,40 +572,40 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     return marker;
   }
   
-//   visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
-//   {
-//     float scale = .02;
-//     
-//     visualization_msgs::Marker marker;
-//     //marker.header.frame_id = odom_frame_id_;
-//     //marker.header.stamp = old_header_.stamp;
-//     marker.header = old_header_;
-//     marker.type = visualization_msgs::Marker::POINTS;
-//     marker.action = visualization_msgs::Marker::ADD;
-//     marker.ns = "nearest";
-//     marker.color.a = .75;
-//     marker.color.g = 1;
-//     marker.color.r = 1;
-//     marker.scale.x = scale;
-//     marker.scale.y = scale;
-//     marker.scale.z = scale;
-//     
-//     int num_cells = ego_circle_.cells_.size();
-//     
-//     std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
-//     
-//     for(const auto& point : points)
-//     {
-//       geometry_msgs::Point point_msg;
-//       point_msg.x = point.x;
-//       point_msg.y = point.y;
-//       point_msg.z = 0;
-//       
-//       marker.points.push_back(point_msg);
-//     }
-//     
-//     return marker;
-//   }
+  //   visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
+  //   {
+  //     float scale = .02;
+  //     
+  //     visualization_msgs::Marker marker;
+  //     //marker.header.frame_id = odom_frame_id_;
+  //     //marker.header.stamp = old_header_.stamp;
+  //     marker.header = old_header_;
+  //     marker.type = visualization_msgs::Marker::POINTS;
+  //     marker.action = visualization_msgs::Marker::ADD;
+  //     marker.ns = "nearest";
+  //     marker.color.a = .75;
+  //     marker.color.g = 1;
+  //     marker.color.r = 1;
+  //     marker.scale.x = scale;
+  //     marker.scale.y = scale;
+  //     marker.scale.z = scale;
+  //     
+  //     int num_cells = ego_circle_.cells_.size();
+  //     
+  //     std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
+  //     
+  //     for(const auto& point : points)
+  //     {
+  //       geometry_msgs::Point point_msg;
+  //       point_msg.x = point.x;
+  //       point_msg.y = point.y;
+  //       point_msg.z = 0;
+  //       
+  //       marker.points.push_back(point_msg);
+  //     }
+  //     
+  //     return marker;
+  //   }
   
   void EgoCircleROS::publishDepthScans()
   {
@@ -617,7 +624,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       scan.ranges = depths;
       scan.range_min = 0;
       scan.range_max = ego_circle_.max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
-
+      
       if(publish_scans)
       {
         scan_pub_.publish(scan);
@@ -626,7 +633,7 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
       if(publish_inflated_scans)
       {
         scan.ranges = ego_circle_.inflateDepths(depths);
-      
+        
         inflated_scan_pub_.publish(scan);
       }
     }
@@ -658,8 +665,8 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     {
       ROS_DEBUG("Getting Transformation details");
       geometry_msgs::TransformStamped trans = tf_buffer_.lookupTransform(new_header.frame_id, new_header.stamp,
-                                                                      old_header.frame_id, old_header.stamp,
-                                                                      odom_frame_id_); 
+                                                                         old_header.frame_id, old_header.stamp,
+                                                                         odom_frame_id_); 
       old_ego_circle_.applyTransform(trans);
       
       ego_circle_.insertPoints(old_ego_circle_);
@@ -671,27 +678,28 @@ std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
     }
     return true;
   }
-
-
-std::vector<EgoCircularPoint> makePoints(int num)
-{
-  std::random_device rd;
-  std::mt19937 gen(rd());
   
-  ROS_INFO_STREAM("Making " << num << " points");
-  std::vector<EgoCircularPoint> points;
   
-  for(int i = 0; i < num; i++)
+  std::vector<EgoCircularPoint> makePoints(int num)
   {
-    //float d = std::fmod(i,4);
-    float d = std::generate_canonical<double,10>(gen);
-    float angle = 6.0 /num * i;
-    float x = std::sin(angle)*d;
-    float y = std::cos(angle)*d;
-    EgoCircularPoint point(x,y);
-    points.push_back(point);
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
+    ROS_INFO_STREAM("Making " << num << " points");
+    std::vector<EgoCircularPoint> points;
+    
+    for(int i = 0; i < num; i++)
+    {
+      //float d = std::fmod(i,4);
+      float d = std::generate_canonical<double,10>(gen);
+      float angle = 6.0 /num * i;
+      float x = std::sin(angle)*d;
+      float y = std::cos(angle)*d;
+      EgoCircularPoint point(x,y);
+      points.push_back(point);
+    }
+    return points;
   }
-  return points;
+  
 }
 
-}
