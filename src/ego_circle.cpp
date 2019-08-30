@@ -695,20 +695,3 @@ std::vector<EgoCircularPoint> makePoints(int num)
 }
 
 }
-
-int main(int argc, char **argv)
-{
-  std::string name= "ego_circle_tester";
-  ros::init(argc, argv, name);
-  ros::start();
-  ros::NodeHandle nh;
-  ros::NodeHandle pnh("~");
-  
-  ego_circle::EgoCircleROS circle_wrapper;
-  circle_wrapper.init();
-  
-  ego_circle::EgoCircle& circle = circle_wrapper.ego_circle_;
-  
-  //circle.insertPoints(ego_circle::makePoints(500),false);
-  ros::spin();
-}

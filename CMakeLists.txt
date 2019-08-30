@@ -29,7 +29,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  #LIBRARIES ego_circle
+  LIBRARIES ego_circle_lib
   CATKIN_DEPENDS geometry_msgs nav_msgs pcl_ros pcl_conversions sensor_msgs tf2_ros tf2_sensor_msgs visualization_msgs
 )
 
@@ -44,9 +44,18 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(ego_circle src/ego_circle.cpp)
+# Target names are not consistent with filenames to avoid breaking api changes
+add_library(ego_circle_lib src/ego_circle.cpp)
+add_dependencies(ego_circle_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_compile_options(ego_circle_lib PUBLIC -std=c++11)
+target_link_libraries(ego_circle_lib 
+  ${catkin_LIBRARIES}
+)
+
+add_executable(ego_circle src/ego_circle_node.cpp)
 add_dependencies(ego_circle ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_compile_options(ego_circle PUBLIC -std=c++11)
-target_link_libraries(ego_circle 
+target_link_libraries(ego_circle
+  ego_circle_lib
   ${catkin_LIBRARIES}
 )
