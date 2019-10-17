@@ -514,7 +514,7 @@ private:
   
   
 public:
-  std::unique_ptr<EgoCircle> ego_circle_,old_ego_circle_;
+  EgoCircle ego_circle_,old_ego_circle_;
   static constexpr float OFFSET=1;
   
 public:
