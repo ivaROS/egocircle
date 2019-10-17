@@ -29,7 +29,7 @@ namespace ego_circle
   {
     float key = point.getKey();
     
-    ROS_DEBUG_STREAM("Inserting point [" << point.x << "," << point.y << "] depth_sq: " << key << ", clearing: " << clearing << ", cur_min: " << current_min_);
+    ROS_DEBUG_STREAM("Inserting point [" << point.x << "," << point.y << "] depth_sq: " << key << ", clearing: " << clearing << ", cur_min: " << current_min_ << ", MAX_DEPTH_SQ: " << MAX_DEPTH_SQ);
     
     if(clearing && !border_)
     {
@@ -438,9 +438,11 @@ namespace ego_circle
   
   void EgoCircleROS::prep()
   {
-    //swap(ego_circle_, old_ego_circle_);
-    std::swap(ego_circle_.cells_, old_ego_circle_.cells_);
-
+    ROS_DEBUG_STREAM("pre-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+    swap(ego_circle_, old_ego_circle_);
+    //std::swap(ego_circle_.cells_, old_ego_circle_.cells_);
+    ROS_DEBUG_STREAM("post-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+    
     {
       //TODO: lock mutex here!
       if(ego_circle_.max_depth_ == cur_config_.max_depth)
@@ -454,6 +456,9 @@ namespace ego_circle
       }
       
     }
+    
+    ROS_DEBUG_STREAM("post-reset: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+    
     
   }
   
@@ -511,6 +516,10 @@ namespace ego_circle
       prep();
       
       std_msgs::Header header = scan->header;
+      ROS_DEBUG_STREAM("Now adding laser scan");
+      
+      ROS_DEBUG_STREAM("ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+      
       ego_circle_.insertPoints(*scan);
       
       update(header);
@@ -627,7 +636,7 @@ namespace ego_circle
                                                                          old_header.frame_id, old_header.stamp,
                                                                          odom_frame_id_); 
       old_ego_circle_.applyTransform(trans);
-      
+      ROS_DEBUG_STREAM("Now inserting transformed old points into new egocircle");
       ego_circle_.insertPoints(old_ego_circle_);
     }
     catch (tf2::TransformException &ex) 

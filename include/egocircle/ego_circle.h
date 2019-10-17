@@ -300,12 +300,13 @@ struct EgoCircle
   
 };
 
-// inline
-// void swap(EgoCircle& lhs, EgoCircle& rhs)
-// {
-//   std::swap(lhs.cells_, rhs.cells_);
-//   //Note: Currently, the rest of the fields are fixed, so no need to swap them
-// }
+inline
+void swap(EgoCircle& lhs, EgoCircle& rhs)
+{
+  std::swap(lhs.cells_, rhs.cells_);
+  std::swap(lhs.max_depth_, rhs.max_depth_);
+  //Note: Currently, the rest of the fields are fixed, so no need to swap them
+}
 
 
 
