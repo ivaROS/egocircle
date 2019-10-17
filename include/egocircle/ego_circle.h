@@ -1,5 +1,5 @@
-#ifndef PIPS_DWA_EGO_CIRCLE_H
-#define PIPS_DWA_EGO_CIRCLE_H
+#ifndef EGOCIRCLE_EGO_CIRCLE_H
+#define EGOCIRCLE_EGO_CIRCLE_H
 
 #include <map>
 #include <vector>
@@ -20,7 +20,9 @@
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <deque>
 #include <sensor_msgs/LaserScan.h>
+#include <dynamic_reconfigure/server.h>
 
+#include <egocircle/egocircleConfig.h>
 
 namespace ego_circle
 {
@@ -142,17 +144,16 @@ struct FloatCmp
 
 struct EgoCircularCell
 {
-  constexpr static float MAX_DEPTH = 3;
-  constexpr static float MAX_DEPTH_SQ = MAX_DEPTH*MAX_DEPTH;
+  float MAX_DEPTH_SQ;
   
   //std::vector<float> x,y;
   std::vector<EgoCircularPoint> points_;
-  float current_min_ = MAX_DEPTH_SQ;
-  bool cleared_ = false;
-  bool border_ = false;
+  float current_min_;
+  bool cleared_=false;
+  bool border_=false;
   
   typedef std::vector<EgoCircularPoint>::iterator iterator;
-    
+  
   void insertPoint(EgoCircularPoint point, bool clearing);
   
   void applyTransform(SE2Transform transform);
@@ -169,6 +170,8 @@ struct EgoCircularCell
   
   void reset();
   
+  void reset(float max_depth_sq);
+    
   void printPoints() const;
 };
 
@@ -209,10 +212,6 @@ struct EgoCircleWidthConverter
 {
   float scale;
   
-//   EgoCircleWidthConverter(int size, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(size/(2*std::acos(-1)) *2  )  )   )   )
-//   {
-//   }
-  
   EgoCircleWidthConverter() {}
   
   EgoCircleWidthConverter(EgoCircleIndexer idx, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(idx.scale *2))))
@@ -232,7 +231,7 @@ struct EgoCircle
 {
   std::vector<EgoCircularCell> cells_;
   
-  constexpr static float max_depth_ = EgoCircularCell::MAX_DEPTH;
+  float max_depth_;
   float inscribed_radius_ = .18;
   EgoCircleIndexer indexer_;
   EgoCircleWidthConverter converter_;
@@ -243,7 +242,7 @@ struct EgoCircle
   
   bool clearing_enabled_;
   
-  EgoCircle(int size) : 
+  EgoCircle(int size) :
     indexer_(size),
     converter_(indexer_, inscribed_radius_)
   {
@@ -266,6 +265,8 @@ struct EgoCircle
     cells[ind].insertPoint(point, clearing);
   }
   
+  void setMaxDepth(float max_depth, float max_depth_sq);
+  
   //TODO: if clearing, should clear first, then add all the points, otherwise risk clearing new points too
   void insertPoints(std::vector<EgoCircularCell>& cells, std::vector<EgoCircularPoint> points, bool clearing);
   
@@ -277,7 +278,7 @@ struct EgoCircle
   
   void insertPoints(const sensor_msgs::LaserScan& scan);
   
-  void updateCells();
+  //void updateCells();
 
   void applyTransform(geometry_msgs::TransformStamped transform);
   
@@ -295,14 +296,16 @@ struct EgoCircle
   
   void reset();
   
+  void reset(float max_depth);
+  
 };
 
-inline
-void swap(EgoCircle& lhs, EgoCircle& rhs)
-{
-  std::swap(lhs.cells_, rhs.cells_);
-  //Note: Currently, the rest of the fields are fixed, so no need to swap them
-}
+// inline
+// void swap(EgoCircle& lhs, EgoCircle& rhs)
+// {
+//   std::swap(lhs.cells_, rhs.cells_);
+//   //Note: Currently, the rest of the fields are fixed, so no need to swap them
+// }
 
 
 
@@ -503,11 +506,15 @@ private:
   
   std_msgs::Header old_header_;
   
-  std::string odom_frame_id_ = "odom";
-  std::string base_frame_id_ = "base_footprint";
+  std::string odom_frame_id_;
+  std::string base_frame_id_;
+  
+  std::shared_ptr<dynamic_reconfigure::Server<egocircle::egocircleConfig> > dsrv_;
+  egocircle::egocircleConfig cur_config_;
+  
   
 public:
-  EgoCircle ego_circle_,old_ego_circle_;
+  std::unique_ptr<EgoCircle> ego_circle_,old_ego_circle_;
   static constexpr float OFFSET=1;
   
 public:
@@ -519,6 +526,8 @@ public:
   void publishPoints();
   
 private:
+  void reconfigureCB(const egocircle::egocircleConfig& config, uint32_t level);
+  
   void odomCB(const nav_msgs::Odometry::ConstPtr& odom_msg);
   
   void pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg);
@@ -543,4 +552,4 @@ private:
 
 }
 
-#endif //PIPS_DWA_EGO_CIRCLE_H
+#endif //EGOCIRCLE_EGO_CIRCLE_H

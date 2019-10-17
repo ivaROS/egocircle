@@ -20,12 +20,16 @@
 #include <deque>
 #include <sensor_msgs/LaserScan.h>
 
+#include <type_traits>
+
 namespace ego_circle
 {
   
   void EgoCircularCell::insertPoint(EgoCircularPoint point, bool clearing)
   {
     float key = point.getKey();
+    
+    ROS_DEBUG_STREAM("Inserting point [" << point.x << "," << point.y << "] depth_sq: " << key << ", clearing: " << clearing << ", cur_min: " << current_min_);
     
     if(clearing && !border_)
     {
@@ -78,6 +82,12 @@ namespace ego_circle
     points_.clear();
     current_min_ = MAX_DEPTH_SQ;
     cleared_ = false;
+  }
+  
+  void EgoCircularCell::reset(float max_depth_sq)
+  {
+    MAX_DEPTH_SQ = max_depth_sq;
+    reset();
   }
   
   void EgoCircularCell::applyTransform(SE2Transform transform)
@@ -146,34 +156,6 @@ namespace ego_circle
     }
   }
   
-  void EgoCircle::updateCells()
-  {
-    std::vector<EgoCircularCell> cells(cells_.size());
-    
-    int num_points = 0;
-    
-    for(auto cell : cells_)
-    {
-      for(auto point : cell)
-      {
-        insertPoint(cells, point, false);
-        num_points++;
-      }
-    }
-    
-    //NOTE: This should work, but requires properly fully declaring the iterator class beforehand
-    //     for(auto point : *this)
-    //     {
-    //       insertPoint(cells, point);
-    //       num_points++;
-    //     }
-    
-    
-    ROS_DEBUG_STREAM("Updated " << num_points << " points");
-    
-    cells_ = cells; //TODO: hold onto current and previous cell vectors; clear each cell after copying points from it, and std::swap vectors here
-    
-  }
   
   void EgoCircle::applyTransform(geometry_msgs::TransformStamped transform)
   {
@@ -184,7 +166,6 @@ namespace ego_circle
     {
       cell.applyTransform(trans);
     }
-    //updateCells();
     
     ros::WallTime end = ros::WallTime::now();
     
@@ -207,19 +188,6 @@ namespace ego_circle
     }
     return depths;
   }
-  
-  //   std::vector<EgoCircularPoint> EgoCircle::getNearestPoints()
-  //   {
-  //     std::vector<EgoCircularPoint> points;
-  //     for(const auto& cell : cells_)
-  //     {
-  //       if(cell.points_.size() > 0)
-  //       {
-  //         points.push_back(cell.points_.begin()->second);
-  //       }
-  //     }
-  //     return points;
-  //   }
   
   int EgoCircle::getN(float depth)
   {
@@ -311,7 +279,16 @@ namespace ego_circle
     }
   }
   
-  
+  void EgoCircle::reset(float max_depth)
+  {
+    max_depth_ = max_depth;
+    float max_depth_sq = max_depth*max_depth;
+    
+    for(EgoCircularCell& cell : cells_)
+    {
+      cell.reset(max_depth_sq);
+    }
+  }
   
   std_msgs::ColorRGBA getConfidenceColor(float confidence, float max_conf)
   {
@@ -377,11 +354,9 @@ namespace ego_circle
   
   
   EgoCircleROS::EgoCircleROS(ros::NodeHandle nh, ros::NodeHandle pnh):
-  nh_(nh),
-  pnh_(pnh),
-  tf_listener_(tf_buffer_),
-  ego_circle_(512),
-  old_ego_circle_(512)
+    nh_(nh),
+    pnh_(pnh),
+    tf_listener_(tf_buffer_)
   {
     
   }
@@ -393,17 +368,29 @@ namespace ego_circle
     std::string pointcloud_topic = "pointcloud";
     std::string laserscan_topic = "scan";
     
+    //ROS_WARN_STREAM("Swapping is good since object is move constructible: " << std::is_move_constructible<EgoCircle>());
+    
+    if(!pnh_.param<std::string>("base_frame_id", base_frame_id_, "base_link"))
+    {
+      pnh_.setParam("base_frame_id", base_frame_id_);
+    }
+    
+    if(!pnh_.param<std::string>("odom_frame_id", odom_frame_id_, "odom"))
+    {
+      pnh_.setParam("odom_frame_id", odom_frame_id_);
+    }
+    
+    dsrv_ = std::make_shared<dynamic_reconfigure::Server<egocircle::egocircleConfig> >(pnh_);
+    dynamic_reconfigure::Server<egocircle::egocircleConfig>::CallbackType cb = boost::bind(&EgoCircleROS::reconfigureCB, this, _1, _2);
+    dsrv_->setCallback(cb);
+    
     pc_tf_filter_ = std::make_shared<PC_TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
     pc_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::pointcloudCB, this, _1));
     
     //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
     //tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
     pc_tf_filter_->setTolerance(ros::Duration(0.01));
-    
-    ego_circle_ = EgoCircle(512);
-    ego_circle_.clearing_enabled_ = true;
-    
-    
+        
     ls_tf_filter_ = std::make_shared<LS_TF_Filter>(ls_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
     ls_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::laserscanCB, this, _1));
     ls_tf_filter_->setTolerance(ros::Duration(0.01));
@@ -416,6 +403,15 @@ namespace ego_circle
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
     scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("point_scan",5);
     inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
+  }
+  
+  void EgoCircleROS::reconfigureCB(const egocircle::egocircleConfig& config, uint32_t level)
+  {
+    {
+      //lock mutex
+      cur_config_ = config;
+    }
+    ROS_INFO_STREAM("ReconfigureCB: MaxDepth=" << cur_config_.max_depth);
   }
   
   void EgoCircleROS::publishPoints()
@@ -439,7 +435,28 @@ namespace ego_circle
   void EgoCircleROS::prep()
   {
     swap(ego_circle_, old_ego_circle_);
-    ego_circle_.reset();
+    
+    if(!ego_circle_)
+    {
+      ego_circle_.reset(new EgoCircle(512));
+      ego_circle_->clearing_enabled_ = true;
+      
+      old_ego_circle_.reset(new EgoCircle(512));
+    }
+        
+    {
+      //TODO: lock mutex here!
+      if(ego_circle_->max_depth_ == cur_config_.max_depth)
+      {
+        ego_circle_->reset();
+      }
+      else
+      {
+        ROS_INFO_STREAM("Setting new egocircle max depth to " << cur_config_.max_depth);
+        ego_circle_->reset(cur_config_.max_depth);
+      }
+      
+    }
     
   }
   
@@ -473,7 +490,7 @@ namespace ego_circle
       
       
       
-      ego_circle_.insertPoints(*new_cloud);
+      ego_circle_->insertPoints(*new_cloud);
     }
     catch (tf2::TransformException &ex) 
     {
@@ -497,27 +514,7 @@ namespace ego_circle
       prep();
       
       std_msgs::Header header = scan->header;
-      //header.frame_id = base_frame_id_;
-      
-      //       try 
-      //       {
-      //         geometry_msgs::TransformStamped transformStamped;
-      //         transformStamped = tf_buffer_.lookupTransform(base_frame_id_, header.stamp, scan->header.frame_id, header.stamp,
-      //                                                       odom_frame_id_); 
-      //         
-      //         sensor_msgs::LaserScan transformed_scan;
-      //         
-      //         tf2::doTransform(*scan, transformed_scan, transformStamped);
-      //         
-      //         ego_circle_.insertPoints(transformed_scan);
-      //       }
-      //       catch (tf2::TransformException &ex) 
-      //       {
-      //         ROS_WARN_STREAM("Problem finding transform:\n" <<ex.what());
-      //       }
-      
-      //TODO: make sure to either transform points properly before inserting or use this frame as the base_frame_id
-      ego_circle_.insertPoints(*scan);
+      ego_circle_->insertPoints(*scan);
       
       update(header);
       
@@ -548,10 +545,10 @@ namespace ego_circle
     marker.scale.y = scale;
     marker.scale.z = scale;
     
-    int num_cells = ego_circle_.cells_.size();
+    int num_cells = ego_circle_->cells_.size();
     
     
-    for( EgoCircle::iterator it = ego_circle_.begin(); it != ego_circle_.end(); ++it)
+    for( EgoCircle::iterator it = ego_circle_->begin(); it != ego_circle_->end(); ++it)
     {
       EgoCircularPoint point = *it;
       geometry_msgs::Point point_msg;
@@ -572,41 +569,6 @@ namespace ego_circle
     return marker;
   }
   
-  //   visualization_msgs::Marker EgoCircleROS::getVisualizationMsgNearest()
-  //   {
-  //     float scale = .02;
-  //     
-  //     visualization_msgs::Marker marker;
-  //     //marker.header.frame_id = odom_frame_id_;
-  //     //marker.header.stamp = old_header_.stamp;
-  //     marker.header = old_header_;
-  //     marker.type = visualization_msgs::Marker::POINTS;
-  //     marker.action = visualization_msgs::Marker::ADD;
-  //     marker.ns = "nearest";
-  //     marker.color.a = .75;
-  //     marker.color.g = 1;
-  //     marker.color.r = 1;
-  //     marker.scale.x = scale;
-  //     marker.scale.y = scale;
-  //     marker.scale.z = scale;
-  //     
-  //     int num_cells = ego_circle_.cells_.size();
-  //     
-  //     std::vector<EgoCircularPoint> points = ego_circle_.getNearestPoints();
-  //     
-  //     for(const auto& point : points)
-  //     {
-  //       geometry_msgs::Point point_msg;
-  //       point_msg.x = point.x;
-  //       point_msg.y = point.y;
-  //       point_msg.z = 0;
-  //       
-  //       marker.points.push_back(point_msg);
-  //     }
-  //     
-  //     return marker;
-  //   }
-  
   void EgoCircleROS::publishDepthScans()
   {
     bool publish_scans = scan_pub_.getNumSubscribers()>0;
@@ -614,16 +576,16 @@ namespace ego_circle
     
     if(publish_scans || publish_inflated_scans)
     {
-      std::vector<float> depths = ego_circle_.getDepths();
+      std::vector<float> depths = ego_circle_->getDepths();
       
       sensor_msgs::LaserScan scan;
       scan.header = old_header_;
       scan.angle_min= -std::acos(-1);
       scan.angle_max= std::acos(-1);
-      scan.angle_increment = 1/ego_circle_.indexer_.scale;
+      scan.angle_increment = 1/ego_circle_->indexer_.scale;
       scan.ranges = depths;
       scan.range_min = 0;
-      scan.range_max = ego_circle_.max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
+      scan.range_max = ego_circle_->max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
       
       if(publish_scans)
       {
@@ -632,7 +594,7 @@ namespace ego_circle
       
       if(publish_inflated_scans)
       {
-        scan.ranges = ego_circle_.inflateDepths(depths);
+        scan.ranges = ego_circle_->inflateDepths(depths);
         
         inflated_scan_pub_.publish(scan);
       }
@@ -667,9 +629,9 @@ namespace ego_circle
       geometry_msgs::TransformStamped trans = tf_buffer_.lookupTransform(new_header.frame_id, new_header.stamp,
                                                                          old_header.frame_id, old_header.stamp,
                                                                          odom_frame_id_); 
-      old_ego_circle_.applyTransform(trans);
+      old_ego_circle_->applyTransform(trans);
       
-      ego_circle_.insertPoints(old_ego_circle_);
+      ego_circle_->insertPoints(*old_ego_circle_);
     }
     catch (tf2::TransformException &ex) 
     {

@@ -16,6 +16,12 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
   tf2_sensor_msgs
   visualization_msgs
+  dynamic_reconfigure
+)
+
+
+generate_dynamic_reconfigure_options(
+    cfg/egocircle.cfg
 )
 
 ###################################
@@ -30,7 +36,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ego_circle_lib
-  CATKIN_DEPENDS geometry_msgs nav_msgs pcl_ros pcl_conversions sensor_msgs tf2_ros tf2_sensor_msgs visualization_msgs
+  CATKIN_DEPENDS geometry_msgs nav_msgs pcl_ros pcl_conversions sensor_msgs tf2_ros tf2_sensor_msgs visualization_msgs dynamic_reconfigure
 )
 
 ###########
@@ -43,6 +49,8 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
 )
+
+
 
 # Target names are not consistent with filenames to avoid breaking api changes
 add_library(ego_circle_lib src/ego_circle.cpp)
