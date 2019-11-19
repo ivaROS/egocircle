@@ -204,8 +204,41 @@ struct EgoCircleIndexer
   
   int getIndex(EgoCircularPoint point) const
   {
-    return getIndex(std::atan2(point.y,point.x));
+    return getIndex(PolarPoint(point));
   }
+  
+  void getIndex(float angle, unsigned int& index) const
+  {
+    index = getIndex(angle);
+  }
+  
+  template <typename T>
+  void getIndex(float angle, T& index) const
+  {
+    index = fmodf(angle * scale + size / 2, size);
+  }
+  
+  template <typename S, typename T>
+  void getIndex(S angle, T& index) const
+  {
+    getIndex(toAngle(angle), index);
+  }
+  
+  float toAngle(float angle) const
+  {
+    return angle;
+  }
+  
+  float toAngle(PolarPoint point) const
+  {
+    return point.theta;
+  }
+  
+  float toAngle(EgoCircularPoint point) const
+  {
+    return toAngle(PolarPoint(point));
+  }
+  
 };
 
 struct EgoCircleWidthConverter
