@@ -130,8 +130,8 @@ namespace ego_circle
   
   void EgoCircle::insertPoints(const sensor_msgs::LaserScan& scan)
   {
-    int start_ind = getIndex(scan.angle_min);
-    int end_ind = getIndex(scan.angle_max);
+    unsigned int start_ind = getIndex(scan.angle_min);
+    unsigned int end_ind = getIndex(scan.angle_max);
     
     cells_[start_ind].border_ = true;
     cells_[end_ind].border_ = true;
@@ -176,7 +176,7 @@ namespace ego_circle
   std::vector<float> EgoCircle::getDepths()
   {
     std::vector<float> depths(cells_.size());
-    for(int i = 0; i < cells_.size(); i++)
+    for(unsigned int i = 0; i < cells_.size(); i++)
     {
       const auto& cell = cells_[i];
       float depth = max_depth_;
@@ -199,13 +199,13 @@ namespace ego_circle
     std::vector<float> inflated_depths = depths; //(depths.size());
     
     std::vector<int> ns(depths.size());
-    for(int i = 0; i < depths.size(); i++)
+    for(unsigned int i = 0; i < depths.size(); i++)
     {
       ns[i] = getN(depths[i]);
       //inflated_depths[i]-=inscribed_radius_;
     }
     int n;
-    for(int i = 0; i < depths.size(); i++)
+    for(int i = 0; i < (int)depths.size(); i++)
     {
       n = ns[i];
       
@@ -227,7 +227,7 @@ namespace ego_circle
   
   void EgoCircle::printPoints() const
   {
-    int id = 0;
+    unsigned int id = 0;
     for(const EgoCircularCell& cell : cells_)
     {
       ROS_INFO_STREAM("\tCell #" << id << ":");
@@ -238,7 +238,7 @@ namespace ego_circle
   
   void EgoCircle::countPoints() const
   {
-    int num_points = 0;
+    unsigned int num_points = 0;
     
     for(auto cell : cells_)
     {
@@ -256,7 +256,7 @@ namespace ego_circle
   
   EgoCircle::iterator EgoCircle::begin()
   {
-    for(int i = 0; i < cells_.size(); i++)
+    for(unsigned int i = 0; i < cells_.size(); i++)
     {
       if(cells_[i].points_.size() > 0)
       {
@@ -551,7 +551,7 @@ namespace ego_circle
     marker.scale.y = scale;
     marker.scale.z = scale;
     
-    int num_cells = ego_circle_.cells_.size();
+    unsigned int num_cells = ego_circle_.cells_.size();
     
     
     for( EgoCircle::iterator it = ego_circle_.begin(); it != ego_circle_.end(); ++it)
@@ -562,7 +562,7 @@ namespace ego_circle
       point_msg.y = point.y;
       point_msg.z = 0;
       
-      int cell_id = it.getCell();
+      unsigned int cell_id = it.getCell();
       std_msgs::ColorRGBA color = getConfidenceColor(cell_id, num_cells);
       
       marker.points.push_back(point_msg);
@@ -648,7 +648,7 @@ namespace ego_circle
   }
   
   
-  std::vector<EgoCircularPoint> makePoints(int num)
+  std::vector<EgoCircularPoint> makePoints(unsigned int num)
   {
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -656,7 +656,7 @@ namespace ego_circle
     ROS_INFO_STREAM("Making " << num << " points");
     std::vector<EgoCircularPoint> points;
     
-    for(int i = 0; i < num; i++)
+    for(unsigned int i = 0; i < num; i++)
     {
       //float d = std::fmod(i,4);
       float d = std::generate_canonical<double,10>(gen);

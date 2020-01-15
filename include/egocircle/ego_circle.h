@@ -181,7 +181,7 @@ typedef pcl::PointCloud<PCLPoint> PCLPointCloud;
 
 struct EgoCircleIndexer
 {
-  int size;
+  unsigned int size;
   float scale;
   
   EgoCircleIndexer() {}
@@ -192,17 +192,17 @@ struct EgoCircleIndexer
   {}
     
   //NOTE: All that matters is that cells are evenly mapped to a circle, so no rounding is necessary here
-  int getIndex(float angle) const
+  unsigned int getIndex(float angle) const
   {
-    return ((int)(angle * scale + size / 2)) % size;
+    return ((unsigned int)(angle * scale + size / 2)) % size;
   }
   
-  int getIndex(PolarPoint point) const
+  unsigned int getIndex(PolarPoint point) const
   {
     return getIndex(point.theta);
   }
   
-  int getIndex(EgoCircularPoint point) const
+  unsigned int getIndex(EgoCircularPoint point) const
   {
     return getIndex(PolarPoint(point));
   }
@@ -275,7 +275,7 @@ struct EgoCircle
   
   bool clearing_enabled_;
   
-  EgoCircle(int size) :
+  EgoCircle(unsigned int size) :
     indexer_(size),
     converter_(indexer_, inscribed_radius_)
   {
@@ -286,7 +286,7 @@ struct EgoCircle
   iterator end();
   
   template <typename T>
-  int getIndex(T point)
+  unsigned int getIndex(T point)
   {
     return indexer_.getIndex(point);
   }
@@ -294,7 +294,7 @@ struct EgoCircle
   template <typename T>
   void insertPoint(std::vector<EgoCircularCell>& cells, T point, bool clearing)
   {
-    int ind = getIndex(point);
+    unsigned int ind = getIndex(point);
     cells[ind].insertPoint(point, clearing);
   }
   
@@ -347,18 +347,18 @@ class EgoCircleIter
 {
 private:
   EgoCircle& circle_;
-  int cell_id_;
+  unsigned int cell_id_;
   EgoCircularCell::iterator point_it_;
   
 public:
   
-  EgoCircleIter(EgoCircle& circle, int cell_id, EgoCircularCell::iterator point_it) :
+  EgoCircleIter(EgoCircle& circle, unsigned int cell_id, EgoCircularCell::iterator point_it) :
     circle_(circle),
     cell_id_(cell_id),
     point_it_(point_it)
   {}
   
-  int getCell() { return cell_id_; }
+  unsigned int getCell() { return cell_id_; }
   
   EgoCircleIter & operator++() 
   {
