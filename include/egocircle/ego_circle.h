@@ -68,7 +68,7 @@ struct PolarPoint
     theta(std::atan2(pnt.y,pnt.x))
   {}
   
-  operator EgoCircularPoint()
+  operator EgoCircularPoint() const
   {
     float x = std::cos(theta)*r;
     float y = std::sin(theta)*r;
