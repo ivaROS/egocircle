@@ -4,6 +4,8 @@
 #include <vector>
 #include <cmath>
 
+#include <random>
+
 #include <geometry_msgs/TransformStamped.h>
 #include <tf/LinearMath/Matrix3x3.h>
 
@@ -29,7 +31,7 @@ namespace ego_circle
   {
     float key = point.getKey();
     
-    ROS_DEBUG_STREAM("Inserting point [" << point.x << "," << point.y << "] depth_sq: " << key << ", clearing: " << clearing << ", cur_min: " << current_min_ << ", MAX_DEPTH_SQ: " << MAX_DEPTH_SQ);
+    // ROS_DEBUG_STREAM("Inserting point [" << point.x << "," << point.y << "] depth_sq: " << key << ", clearing: " << clearing << ", cur_min: " << current_min_ << ", MAX_DEPTH_SQ: " << MAX_DEPTH_SQ);
     
     if(clearing && !border_)
     {
@@ -248,7 +250,7 @@ namespace ego_circle
       }
     }
     
-    ROS_INFO_STREAM("Counted " << num_points << " points");
+    // ROS_INFO_STREAM("Counted " << num_points << " points");
     
   }
   
@@ -369,6 +371,7 @@ namespace ego_circle
     std::string odom_topic = "odom";
     std::string pointcloud_topic = "pointcloud";
     std::string laserscan_topic = "scan";
+    scan_intensities.resize(512, 0.5);
     
     //ROS_WARN_STREAM("Swapping is good since object is move constructible: " << std::is_move_constructible<EgoCircle>());
     
@@ -405,7 +408,13 @@ namespace ego_circle
     
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
-    scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("point_scan",5);
+
+    std::string output_scan_topic;
+    if(!pnh_.param<std::string>("output_scan_topic", output_scan_topic, "point_scan"))
+    {
+      pnh_.setParam("output_scan_topic", output_scan_topic);
+    }
+    scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>(output_scan_topic,5);
     inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
   }
   
@@ -438,10 +447,10 @@ namespace ego_circle
   
   void EgoCircleROS::prep()
   {
-    ROS_DEBUG_STREAM("pre-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+    // ROS_DEBUG_STREAM("pre-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
     swap(ego_circle_, old_ego_circle_);
     //std::swap(ego_circle_.cells_, old_ego_circle_.cells_);
-    ROS_DEBUG_STREAM("post-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+    // ROS_DEBUG_STREAM("post-swap: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
     
     {
       //TODO: lock mutex here!
@@ -451,15 +460,13 @@ namespace ego_circle
       }
       else
       {
-        ROS_INFO_STREAM("Setting new egocircle max depth to " << cur_config_.max_depth);
+        // ROS_INFO_STREAM("Setting new egocircle max depth to " << cur_config_.max_depth);
         ego_circle_.reset(cur_config_.max_depth);
       }
       
     }
     
-    ROS_DEBUG_STREAM("post-reset: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
-    
-    
+    // ROS_DEBUG_STREAM("post-reset: ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
   }
   
   void EgoCircleROS::pointcloudCB(const sensor_msgs::PointCloud2::ConstPtr& pointcloud_msg)
@@ -516,15 +523,15 @@ namespace ego_circle
       prep();
       
       std_msgs::Header header = scan->header;
-      ROS_DEBUG_STREAM("Now adding laser scan");
+      // ROS_DEBUG_STREAM("Now adding laser scan");
       
-      ROS_DEBUG_STREAM("ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+      // ROS_DEBUG_STREAM("ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
       
       ego_circle_.insertPoints(*scan);
       
       update(header);
       
-      ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
+      // ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
       
     }
     else
@@ -569,8 +576,8 @@ namespace ego_circle
       marker.colors.push_back(color);
     }
     
-    ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
-    ROS_DEBUG_STREAM("Publishing " << marker.points.size() << " points");
+    // ROS_INFO_STREAM_THROTTLE(1, "Total # points= " << marker.points.size());
+    // ROS_DEBUG_STREAM("Publishing " << marker.points.size() << " points");
     
     return marker;
   }
@@ -592,7 +599,8 @@ namespace ego_circle
       scan.ranges = depths;
       scan.range_min = 0;
       scan.range_max = ego_circle_.max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
-      
+      scan.intensities = scan_intensities;
+
       if(publish_scans)
       {
         scan_pub_.publish(scan);
@@ -636,7 +644,7 @@ namespace ego_circle
                                                                          old_header.frame_id, old_header.stamp,
                                                                          odom_frame_id_); 
       old_ego_circle_.applyTransform(trans);
-      ROS_DEBUG_STREAM("Now inserting transformed old points into new egocircle");
+      // ROS_DEBUG_STREAM("Now inserting transformed old points into new egocircle");
       ego_circle_.insertPoints(old_ego_circle_);
     }
     catch (tf2::TransformException &ex) 
