@@ -545,9 +545,6 @@ private:
   
   std::shared_ptr<dynamic_reconfigure::Server<egocircle::egocircleConfig> > dsrv_;
   egocircle::egocircleConfig cur_config_;
-
-  std::vector<float> scan_intensities;
-
   
   
 public:

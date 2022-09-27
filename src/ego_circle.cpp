@@ -371,7 +371,6 @@ namespace ego_circle
     std::string odom_topic = "odom";
     std::string pointcloud_topic = "pointcloud";
     std::string laserscan_topic = "scan";
-    scan_intensities.resize(512, 0.5);
     
     //ROS_WARN_STREAM("Swapping is good since object is move constructible: " << std::is_move_constructible<EgoCircle>());
     
@@ -599,7 +598,6 @@ namespace ego_circle
       scan.ranges = depths;
       scan.range_min = 0;
       scan.range_max = ego_circle_.max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
-      scan.intensities = scan_intensities;
 
       if(publish_scans)
       {
