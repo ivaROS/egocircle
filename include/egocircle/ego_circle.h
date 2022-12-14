@@ -555,7 +555,7 @@ public:
   
   EgoCircleROS(ros::NodeHandle nh = ros::NodeHandle(), ros::NodeHandle pnh=ros::NodeHandle("~"));
   
-  bool init();
+  void init();
   
   void publishPoints();
   

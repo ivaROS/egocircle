@@ -365,7 +365,7 @@ namespace ego_circle
     
   }
   
-  bool EgoCircleROS::init()
+  void EgoCircleROS::init()
   {
     int odom_queue_size = 5;
     std::string odom_topic = "odom";
@@ -384,35 +384,46 @@ namespace ego_circle
       pnh_.setParam("odom_frame_id", odom_frame_id_);
     }
     
+    ROS_INFO_STREAM("1");
     dsrv_ = std::make_shared<dynamic_reconfigure::Server<egocircle::egocircleConfig> >(pnh_);
     dynamic_reconfigure::Server<egocircle::egocircleConfig>::CallbackType cb = boost::bind(&EgoCircleROS::reconfigureCB, this, _1, _2);
     dsrv_->setCallback(cb);
     
+    ROS_INFO_STREAM("2");
     pc_tf_filter_ = std::make_shared<PC_TF_Filter>(pc_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
     pc_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::pointcloudCB, this, _1));
     
+    ROS_INFO_STREAM("3");
     //tf_filter_ = std::make_shared<TF_Filter>(odom_subscriber_, tf_buffer_, "base_footprint", odom_queue_size, nh_);
     //tf_filter_->registerCallback(boost::bind(&EgoCircleROS::odomCB, this, _1));
     pc_tf_filter_->setTolerance(ros::Duration(0.01));
     
+    ROS_INFO_STREAM("4");
     ego_circle_.clearing_enabled_ = true;
     
+    ROS_INFO_STREAM("5");
     ls_tf_filter_ = std::make_shared<LS_TF_Filter>(ls_subscriber_, tf_buffer_, odom_frame_id_, odom_queue_size, nh_); //NOTE: this is the correct form for any message but an odometry message
     ls_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::laserscanCB, this, _1));
     ls_tf_filter_->setTolerance(ros::Duration(0.01));
     
+    ROS_INFO_STREAM("6");
     ls_subscriber_.subscribe(nh_, laserscan_topic, 5);
     
+    ROS_INFO_STREAM("7");
     pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
+    ROS_INFO_STREAM("8");
     //odom_subscriber_.subscribe(nh_, odom_topic, odom_queue_size);
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
 
+    ROS_INFO_STREAM("9");
     std::string output_scan_topic;
     if(!pnh_.param<std::string>("output_scan_topic", output_scan_topic, "point_scan"))
     {
       pnh_.setParam("output_scan_topic", output_scan_topic);
     }
+
+    ROS_INFO_STREAM("10");
     scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>(output_scan_topic,5);
     inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
   }
