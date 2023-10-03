@@ -77,6 +77,7 @@ struct PolarPoint
   }
 };
 
+
 inline
 float distance_sq(const EgoCircularPoint& p1, const EgoCircularPoint& p2)
 {
@@ -190,7 +191,7 @@ struct EgoCircleIndexer
     size(size),
     scale(size/(2*std::acos(-1)))
   {}
-    
+      
   //NOTE: All that matters is that cells are evenly mapped to a circle, so no rounding is necessary here
   unsigned int getIndex(float angle) const
   {
@@ -224,6 +225,16 @@ struct EgoCircleIndexer
     getIndex(toAngle(angle), index);
   }
   
+  float toAngle(unsigned int index) const
+  {
+    return (index / scale) - (size/(2*scale));
+  }
+  
+  float toAngle(int index) const
+  {
+    return toAngle(makeUnsigned(index));
+  }
+  
   float toAngle(float angle) const
   {
     return angle;
@@ -239,6 +250,11 @@ struct EgoCircleIndexer
     return toAngle(PolarPoint(point));
   }
   
+  unsigned int makeUnsigned(int index) const
+  {
+    return ((index % size) + size) % size;
+  }
+  
 };
 
 struct EgoCircleWidthConverter
@@ -247,13 +263,13 @@ struct EgoCircleWidthConverter
   
   EgoCircleWidthConverter() {}
   
-  EgoCircleWidthConverter(EgoCircleIndexer idx, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1/(idx.scale *2))))
+  EgoCircleWidthConverter(EgoCircleIndexer idx, float inscribed_radius) : scale(inscribed_radius / (2 * std::sin(1.0/(idx.scale *2))))
   {
   }
   
   int getN(float depth) const
   {
-    int n = std::ceil(scale/depth);
+    int n = int(std::ceil(scale/depth));
 
     return n;
   }
@@ -320,9 +336,9 @@ struct EgoCircle
   std::vector<EgoCircularPoint> getNearestPoints();
 
   int getN(float depth);
-
-  std::vector<float> inflateDepths(const std::vector<float>& depths);
   
+  std::vector<float> inflateDepths(const std::vector<float>& depths);
+
   void printPoints() const;
   
   void countPoints() const;
@@ -582,6 +598,40 @@ private:
 };
 
 
+//Methods that need to be defined in global namespace
+inline
+std::ostream& operator<< (std::ostream& stream, const EgoCircularPoint& point)
+{
+  //stream << toString(gap);
+  stream << "[" << point.x << "," << point.y << "]";
+  return stream;
+}
+
+inline
+std::string toString(const EgoCircularPoint& point)
+{
+  std::stringstream ss;
+  ss << point;
+  
+  return ss.str();
+}
+
+inline
+std::string toString(const PolarPoint& point)
+{
+  std::stringstream ss;
+  ss << "(" << point.r << "m @ " << point.theta << ")";
+  
+  return ss.str();
+}
+
+inline
+std::ostream& operator<< (std::ostream& stream, const PolarPoint& point)
+{
+  //stream << toString(gap);
+  stream << "(" << point.r << "m @ " << point.theta << ")";
+  return stream;
+}
 
 
 }

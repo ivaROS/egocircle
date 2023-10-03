@@ -11,7 +11,7 @@ int main(int argc, char **argv)
   ego_circle::EgoCircleROS circle_wrapper;
   circle_wrapper.init();
   
-  ego_circle::EgoCircle& circle = circle_wrapper.ego_circle_;
+  // ego_circle::EgoCircle& circle = circle_wrapper.ego_circle_;
   
   //circle.insertPoints(ego_circle::makePoints(500),false);
   ros::spin();

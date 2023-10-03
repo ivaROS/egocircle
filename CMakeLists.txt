@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_sensor_msgs
   visualization_msgs
   dynamic_reconfigure
+  laser_geometry
 )
 
 
@@ -55,15 +56,22 @@ include_directories(
 # Target names are not consistent with filenames to avoid breaking api changes
 add_library(ego_circle_lib src/ego_circle.cpp)
 add_dependencies(ego_circle_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_compile_options(ego_circle_lib PUBLIC -std=c++11)
+target_compile_options(ego_circle_lib PUBLIC -std=c++14)
 target_link_libraries(ego_circle_lib 
   ${catkin_LIBRARIES}
 )
 
 add_executable(ego_circle src/ego_circle_node.cpp)
 add_dependencies(ego_circle ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_compile_options(ego_circle PUBLIC -std=c++11)
+target_compile_options(ego_circle PUBLIC -std=c++14)
 target_link_libraries(ego_circle
   ego_circle_lib
+  ${catkin_LIBRARIES}
+)
+
+add_executable(laser_correction src/laser_correction_node.cpp)
+add_dependencies(laser_correction ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_compile_options(laser_correction PUBLIC -std=c++14)
+target_link_libraries(laser_correction
   ${catkin_LIBRARIES}
 )

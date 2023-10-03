@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 #include <cmath>
+#include <random>
 
 #include <geometry_msgs/TransformStamped.h>
 #include <tf/LinearMath/Matrix3x3.h>
@@ -36,6 +37,18 @@ namespace ego_circle
       if(key >= MAX_DEPTH_SQ)
       {
         reset();
+      }
+      else if(std::isnan(key))
+      {
+        current_min_ = MAX_DEPTH_SQ;
+        if(points_.size() == 0)
+        {
+          points_.push_back(point);
+        }
+        else
+        {
+          points_[0] = point;
+        }
       }
       else
       {
@@ -140,7 +153,7 @@ namespace ego_circle
     
     for(auto pnt : it_scan)
     {
-      if(pnt.r==pnt.r)
+      // if(pnt.r==pnt.r)
       {
         insertPoint(cells_, pnt, clearing_enabled_);
       }
@@ -199,20 +212,27 @@ namespace ego_circle
     std::vector<float> inflated_depths = depths; //(depths.size());
     
     std::vector<int> ns(depths.size());
-    for(unsigned int i = 0; i < depths.size(); i++)
+    for(int i = 0; i < depths.size(); i++)
     {
       ns[i] = getN(depths[i]);
       //inflated_depths[i]-=inscribed_radius_;
     }
-    int n;
-    for(int i = 0; i < (int)depths.size(); i++)
+    // int n;
+    for(int i = 0; i < depths.size(); i++)
     {
-      n = ns[i];
-      
+      int n = ns[i];
+      n = (n * 2 > depths.size()) ? depths.size() / 2 : n; 
       for(int j = i - n; j < i + n; j++)
       {
         int ind = (j <0) ? depths.size() + j : ((j >= depths.size()) ? j - depths.size() : j );
-        inflated_depths[ind] = std::min(depths[i] -inscribed_radius_,inflated_depths[ind]);
+        // inflated_depths[ind] = std::min(depths[i] -inscribed_radius_,inflated_depths[ind]);
+        // ROS_INFO_STREAM("ind: " << ind << ", size: " << inflated_depths.size() << ", n: " << n << ", depth: " << depths[i]);
+        float cur_inf_depth = inflated_depths[ind];
+        float new_inf_depth = depths[i] -inscribed_radius_;
+        if(new_inf_depth < cur_inf_depth)
+        {
+          inflated_depths[ind] = new_inf_depth;
+        }
       }
       
       //       for(int j = i+1; j <= i + n; j++)
@@ -224,7 +244,7 @@ namespace ego_circle
     
     return inflated_depths;
   }
-  
+
   void EgoCircle::printPoints() const
   {
     unsigned int id = 0;
@@ -365,7 +385,7 @@ namespace ego_circle
   
   bool EgoCircleROS::init()
   {
-    int odom_queue_size = 5;
+    int odom_queue_size = 20;
     std::string odom_topic = "odom";
     std::string pointcloud_topic = "pointcloud";
     std::string laserscan_topic = "scan";
@@ -399,7 +419,7 @@ namespace ego_circle
     ls_tf_filter_->registerCallback(boost::bind(&EgoCircleROS::laserscanCB, this, _1));
     ls_tf_filter_->setTolerance(ros::Duration(0.01));
     
-    ls_subscriber_.subscribe(nh_, laserscan_topic, 5);
+    ls_subscriber_.subscribe(nh_, laserscan_topic, 20);
     
     pc_subscriber_.subscribe(nh_, pointcloud_topic, 5);
     
@@ -407,6 +427,8 @@ namespace ego_circle
     vis_pub_ = nh_.advertise<visualization_msgs::Marker>("vis",5);
     scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("point_scan",5);
     inflated_scan_pub_ =  nh_.advertise<sensor_msgs::LaserScan>("inflated_point_scan",5);
+
+    return true;
   }
   
   void EgoCircleROS::reconfigureCB(const egocircle::egocircleConfig& config, uint32_t level)
@@ -511,20 +533,23 @@ namespace ego_circle
   {
     if(scan)
     {
-      ros::WallTime starttime = ros::WallTime::now();
-      
-      prep();
-      
-      std_msgs::Header header = scan->header;
-      ROS_DEBUG_STREAM("Now adding laser scan");
-      
-      ROS_DEBUG_STREAM("ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
-      
-      ego_circle_.insertPoints(*scan);
-      
-      update(header);
-      
-      ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
+      if(scan->header.stamp > old_header_.stamp)
+      {
+        ros::WallTime starttime = ros::WallTime::now();
+        
+        prep();
+        
+        std_msgs::Header header = scan->header;
+        ROS_DEBUG_STREAM("Now adding laser scan");
+        
+        ROS_DEBUG_STREAM("ego_circle_.max_depth_: " << ego_circle_.max_depth_ << ", old_ego_circle_.max_depth_: " << old_ego_circle_.max_depth_);
+        
+        ego_circle_.insertPoints(*scan);
+        
+        update(header);
+        
+        ROS_DEBUG_STREAM_NAMED("timing", "Point insertion and update took " <<  (ros::WallTime::now() - starttime).toSec() * 1e3 << "ms");
+      }
       
     }
     else
@@ -597,13 +622,22 @@ namespace ego_circle
       {
         scan_pub_.publish(scan);
       }
-      
+
       if(publish_inflated_scans)
       {
-        scan.ranges = ego_circle_.inflateDepths(depths);
+        sensor_msgs::LaserScan inflated_scan;
+        inflated_scan.header = old_header_;
+        inflated_scan.angle_min= -std::acos(-1);
+        inflated_scan.angle_max= std::acos(-1);
+        inflated_scan.angle_increment = 1.0/ego_circle_.indexer_.scale;
+        inflated_scan.range_min = 0;
+        inflated_scan.range_max = ego_circle_.max_depth_ + OFFSET;  //TODO: make this .01 and see if still visible. Or even get rid of the increase so that only actual points are shown; maybe make it a parameter
         
-        inflated_scan_pub_.publish(scan);
+        inflated_scan.ranges = ego_circle_.inflateDepths(depths);
+        
+        inflated_scan_pub_.publish(inflated_scan);
       }
+      
     }
   }
   
